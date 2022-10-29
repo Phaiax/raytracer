@@ -3,6 +3,9 @@ use std::cell::RefCell;
 use image::Rgb;
 use nalgebra::Vector3;
 
+use rand::prelude::{Rng, Distribution};
+use rand::distributions::Uniform;
+
 pub type Vec3 = Vector3<f32>;
 pub type Color = Vec3;
 pub type Point3 = Vec3;
@@ -28,6 +31,24 @@ impl AsRgb for Color {
             ((self.y * scale).clamp(0.0, 0.999) * 256.0) as u8,
             ((self.z * scale).clamp(0.0, 0.999) * 256.0) as u8,
         ])
+    }
+}
+
+pub fn vec3_random<D: Distribution<f32>, R: Rng>(distr: &D, rng: &mut R) -> Vec3 {
+    Vec3::new(
+        distr.sample(rng),
+        distr.sample(rng),
+        distr.sample(rng),
+    )
+}
+
+pub fn random_in_unit_sphere<R: Rng>(rng: &mut R) -> Vec3 {
+    let dist_m1p1 : Uniform<f32> = Uniform::new(-1.0, 1.0);
+    loop {
+        let p = vec3_random(&dist_m1p1, rng);
+        if p.magnitude_squared() < 1. {
+            return p;
+        }
     }
 }
 

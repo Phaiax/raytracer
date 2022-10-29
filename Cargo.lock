@@ -18,6 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic_cell"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25f1aa563bec15f1204f2197bd1dc2cd937a5cc1e036bb1fffdbffbeb814fcd2"
+dependencies = [
+ "const_panic",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -66,6 +75,12 @@ dependencies = [
  "unicode-width",
  "winapi",
 ]
+
+[[package]]
+name = "const_panic"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ed2b28323eee4fb66bb824401daa3e46bd445b9a9298a3d382b320710ba69dd"
 
 [[package]]
 name = "crc32fast"
@@ -241,6 +256,7 @@ checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 name = "raytracer"
 version = "0.1.0"
 dependencies = [
+ "atomic_cell",
  "image",
  "indicatif",
  "nalgebra",
