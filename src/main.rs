@@ -12,6 +12,7 @@
 
 #![allow(dead_code, unused_imports)]
 
+mod camera;
 mod hittables;
 mod playground;
 mod util;
@@ -20,47 +21,47 @@ mod world;
 use std::rc::Rc;
 
 use crate::hittables::{Hittable, Sphere};
-use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
+use crate::util::{AsRgb, Color, Point3, Ray, Vec3, rand01};
 use crate::world::World;
+use crate::camera::Camera;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
+// use rand::distributions::Uniform;
+// use rand::prelude::Distribution;
+// use rand::rngs::SmallRng;
+// use rand::{Rng, SeedableRng};
 
 const ASPECT_RATIO: f32 = 16.0 / 9.0;
 const IMAGE_WIDTH: u32 = 400;
 const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f32 / ASPECT_RATIO) as u32;
+const SAMPLES_PER_PIXEL : u32 = 100;
 
 pub fn raytracer() {
     let mut img: RgbImage = ImageBuffer::new(IMAGE_WIDTH, IMAGE_HEIGHT);
     let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
-    
+    // let mut small_rng = SmallRng::seed_from_u64(232008239771);
+    // let rn_distr: Uniform<f32> = Uniform::new(0.0, 1.0);
+
     // World
 
     let mut world = World::new();
     world.add(Sphere::new(0., 0., -1., 0.5));
     world.add(Sphere::new(0., -100.5, -1., 100.));
 
-    // Camera
-
-    let viewport_height = 2.0;
-    let viewport_width = viewport_height * ASPECT_RATIO;
-    let focal_length = 1.0;
-
-    let origin = Vec3::new(0., 0., 0.);
-    let horizontal = Vec3::new(viewport_width, 0., 0.);
-    let vertical = Vec3::new(0., viewport_height, 0.);
-    let lower_left_corner =
-        origin - horizontal / 2. - vertical / 2. - Vec3::new(0., 0., focal_length);
+    let camera = Camera::new(ASPECT_RATIO);
 
     for y in 0..img.height() {
         for x in 0..img.width() {
-            let u = x as f32 / (IMAGE_WIDTH - 1) as f32;
-            let v = y as f32 / (IMAGE_HEIGHT - 1) as f32;
-            let ray = Ray::new(
-                origin,
-                lower_left_corner + u * horizontal + v * vertical - origin,
-            );
-            let c = ray_color(&ray, &world);
-            img.put_pixel(x, IMAGE_HEIGHT - 1 - y, c.as_rgb()); // Image uses inverse y axis direction
+            let mut c = Color::zeros();
+            for _ in 0..SAMPLES_PER_PIXEL {
+                // let u = (x as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f32;
+                // let v = (y as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f32;
+                let u = (x as f32 + rand01()) / (IMAGE_WIDTH - 1) as f32;
+                 let v = (y as f32 + rand01()) / (IMAGE_HEIGHT - 1) as f32;
+                let ray = camera.get_ray(u, v);
+                c += ray_color(&ray, &world);
+            }
+            img.put_pixel(x, IMAGE_HEIGHT - 1 - y, c.as_rgb_multisample(SAMPLES_PER_PIXEL)); // Image uses inverse y axis direction
         }
         bar.inc(1);
     }
