@@ -2,10 +2,7 @@ use std::cell::RefCell;
 
 use image::Rgb;
 use nalgebra::Vector3;
-use rand::distributions::Uniform;
-use rand::prelude::Distribution;
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+
 pub type Vec3 = Vector3<f32>;
 pub type Color = Vec3;
 pub type Point3 = Vec3;
@@ -55,18 +52,4 @@ impl Ray {
     pub fn direction(&self) -> Vec3 {
         self.dir
     }
-}
-
-thread_local! {
-    pub static SMALL_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::seed_from_u64(232008239771));
-    pub static RN_DISTR: Uniform<f32> = Uniform::new(0.0, 1.0);
-}
-
-pub fn rand01() -> f32 {
-    RN_DISTR.with(|rn_distr| {
-        SMALL_RNG.with(|small_rng| {
-            let mut small_rng = small_rng.borrow_mut();
-            rn_distr.sample(&mut *small_rng)
-        })
-    })
 }

@@ -21,15 +21,15 @@ mod world;
 use std::rc::Rc;
 
 use crate::hittables::{Hittable, Sphere};
-use crate::util::{AsRgb, Color, Point3, Ray, Vec3, rand01};
+use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
 use crate::camera::Camera;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
-// use rand::distributions::Uniform;
-// use rand::prelude::Distribution;
-// use rand::rngs::SmallRng;
-// use rand::{Rng, SeedableRng};
+use rand::distributions::Uniform;
+use rand::prelude::Distribution;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 const ASPECT_RATIO: f32 = 16.0 / 9.0;
 const IMAGE_WIDTH: u32 = 400;
@@ -39,8 +39,8 @@ const SAMPLES_PER_PIXEL : u32 = 100;
 pub fn raytracer() {
     let mut img: RgbImage = ImageBuffer::new(IMAGE_WIDTH, IMAGE_HEIGHT);
     let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
-    // let mut small_rng = SmallRng::seed_from_u64(232008239771);
-    // let rn_distr: Uniform<f32> = Uniform::new(0.0, 1.0);
+    let mut small_rng = SmallRng::seed_from_u64(232008239771);
+    let rn_distr: Uniform<f32> = Uniform::new(0.0, 1.0);
 
     // World
 
@@ -54,10 +54,8 @@ pub fn raytracer() {
         for x in 0..img.width() {
             let mut c = Color::zeros();
             for _ in 0..SAMPLES_PER_PIXEL {
-                // let u = (x as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f32;
-                // let v = (y as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f32;
-                let u = (x as f32 + rand01()) / (IMAGE_WIDTH - 1) as f32;
-                 let v = (y as f32 + rand01()) / (IMAGE_HEIGHT - 1) as f32;
+                let u = (x as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f32;
+                let v = (y as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f32;
                 let ray = camera.get_ray(u, v);
                 c += ray_color(&ray, &world);
             }
