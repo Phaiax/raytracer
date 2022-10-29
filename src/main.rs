@@ -14,16 +14,16 @@
 
 mod hittables;
 mod playground;
-mod world;
 mod util;
+mod world;
 
 use std::rc::Rc;
 
 use crate::hittables::{Hittable, Sphere};
 use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
+use crate::world::World;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
-use world::World;
 
 const ASPECT_RATIO: f32 = 16.0 / 9.0;
 const IMAGE_WIDTH: u32 = 400;
@@ -32,7 +32,7 @@ const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f32 / ASPECT_RATIO) as u32;
 pub fn raytracer() {
     let mut img: RgbImage = ImageBuffer::new(IMAGE_WIDTH, IMAGE_HEIGHT);
     let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
-
+    
     // World
 
     let mut world = World::new();
@@ -70,7 +70,6 @@ pub fn raytracer() {
 }
 
 fn ray_color(ray: &Ray, world: &World) -> Color {
-    
     if let Some(hitrecord) = world.hit(ray, 0., 1000.) {
         // Color by normal
         return 0.5
