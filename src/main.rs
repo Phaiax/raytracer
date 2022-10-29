@@ -31,9 +31,9 @@ use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
-const ASPECT_RATIO: f32 = 16.0 / 9.0;
+const ASPECT_RATIO: f64 = 16.0 / 9.0;
 const IMAGE_WIDTH: u32 = 400;
-const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f32 / ASPECT_RATIO) as u32;
+const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u32;
 const SAMPLES_PER_PIXEL: u32 = 100;
 const MAX_DEPTH: u32 = 50;
 
@@ -41,7 +41,7 @@ pub fn raytracer() {
     let mut img: RgbImage = ImageBuffer::new(IMAGE_WIDTH, IMAGE_HEIGHT);
     let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
     let mut small_rng = SmallRng::seed_from_u64(232008239771);
-    let rn_distr: Uniform<f32> = Uniform::new(0.0, 1.0);
+    let rn_distr: Uniform<f64> = Uniform::new(0.0, 1.0);
 
     // World
 
@@ -55,8 +55,8 @@ pub fn raytracer() {
         for x in 0..img.width() {
             let mut c = Color::zeros();
             for _ in 0..SAMPLES_PER_PIXEL {
-                let u = (x as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f32;
-                let v = (y as f32 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f32;
+                let u = (x as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f64;
+                let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f64;
                 let ray = camera.get_ray(u, v);
                 c += ray_color(&ray, &world, MAX_DEPTH, &mut small_rng);
             }

@@ -16,7 +16,7 @@ impl World {
 		self.objects.push(hittable)
 	}
 
-	pub fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+	pub fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
 		let mut hit_record = None;
 		let mut closest_so_far = t_max;
 

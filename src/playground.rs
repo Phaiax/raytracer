@@ -16,8 +16,8 @@ pub fn test_image() {
     for y in 0..img.height() {
         for x in 0..img.width() {
             let c = Color::new(
-                x as f32 / (IMAGE_WIDTH - 1) as f32,
-                y as f32 / (IMAGE_HEIGHT - 1) as f32,
+                x as f64 / (IMAGE_WIDTH - 1) as f64,
+                y as f64 / (IMAGE_HEIGHT - 1) as f64,
                 0.25,
             );
 
