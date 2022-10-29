@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
 
 pub struct HitRecord {
@@ -31,6 +33,15 @@ pub trait Hittable {
 pub struct Sphere {
     pub center: Point3,
     pub radius: f32,
+}
+
+impl Sphere {
+    pub fn new(cx: f32, cy: f32, cz: f32, r: f32) -> Rc<dyn Hittable> {
+        Rc::new(Sphere {
+            center : Point3::new(cx, cy, cz),
+            radius: r,
+        })
+    }
 }
 
 impl Hittable for Sphere {
