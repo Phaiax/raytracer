@@ -15,7 +15,7 @@
 mod playground;
 mod util;
 
-use crate::util::{AsRgb, Color, Ray, Vec3};
+use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
 
@@ -54,10 +54,22 @@ pub fn raytracer() {
     }
     bar.finish();
 
-    img.save("test_output.png").unwrap();
+    img.save("output.png").unwrap();
+}
+
+fn hit_sphere(center: &Point3, radius: f32, r: &Ray) -> bool {
+    let oc: Vec3 = r.origin() - center;
+    let a: f32 = r.direction().dot(&r.direction());
+    let b : f32 = 2.0 * oc.dot(&r.direction());
+    let c : f32 = oc.dot(&oc) - radius * radius;
+    let discriminant = b * b - 4. * a * c;
+    discriminant > 0.0
 }
 
 fn ray_color(ray: &Ray) -> Color {
+    if hit_sphere(&Point3::new(0., 0., -1.), 0.5, ray) {
+        return Color::new(1.0, 0., 0.);
+    }
     // Ray hits background
     let unit_dir: Vec3 = ray.dir.normalize(); // .y Range: -1 to 1
     let t = 0.5 * (unit_dir.y + 1.); // Range: 0 to 1
