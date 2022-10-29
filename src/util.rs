@@ -27,9 +27,9 @@ impl AsRgb for Color {
     fn as_rgb_multisample(self, samples_per_pixel: u32) -> Rgb<u8> {
         let scale = 1.0 / samples_per_pixel as f64;
         Rgb([
-            ((self.x * scale).clamp(0.0, 0.999) * 256.0) as u8,
-            ((self.y * scale).clamp(0.0, 0.999) * 256.0) as u8,
-            ((self.z * scale).clamp(0.0, 0.999) * 256.0) as u8,
+            ((self.x * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            ((self.y * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            ((self.z * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
         ])
     }
 }

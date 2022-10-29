@@ -78,7 +78,7 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
         return Color::zeros();
     }
 
-    if let Some(hitrecord) = world.hit(ray, 0., 1000.) {
+    if let Some(hitrecord) = world.hit(ray, 0.001, 1000.) {
         let target = hitrecord.p + hitrecord.normal + random_in_unit_sphere(rng);
         // Color by normal
         return 0.5 * ray_color(&Ray::new(hitrecord.p, target - hitrecord.p), world, depth - 1, rng);
