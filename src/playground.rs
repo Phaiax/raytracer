@@ -17,11 +17,11 @@ pub fn test_image() {
         for x in 0..img.width() {
             let c = Color::new(
                 x as f32 / (IMAGE_WIDTH - 1) as f32,
-                (IMAGE_HEIGHT - y) as f32 / (IMAGE_HEIGHT - 1) as f32,
+                y as f32 / (IMAGE_HEIGHT - 1) as f32,
                 0.25,
             );
 
-            img.put_pixel(x, y, c.as_rgb());
+            img.put_pixel(x, IMAGE_HEIGHT - 1 - y, c.as_rgb());
         }
         bar.inc(1);
     }
