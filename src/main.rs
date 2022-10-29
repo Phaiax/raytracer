@@ -57,18 +57,71 @@ pub fn raytracer() {
     img.save("output.png").unwrap();
 }
 
-fn hit_sphere(center: &Point3, radius: f32, r: &Ray) -> bool {
-    let oc: Vec3 = r.origin() - center;
-    let a: f32 = r.direction().dot(&r.direction());
-    let b : f32 = 2.0 * oc.dot(&r.direction());
-    let c : f32 = oc.dot(&oc) - radius * radius;
-    let discriminant = b * b - 4. * a * c;
-    discriminant > 0.0
+struct HitRecord {
+    p: Point3,
+    normal: Vec3,
+    t: f32,
+    front_face: bool,
 }
 
+impl HitRecord {
+    fn new(p: Vec3, outward_normal: &Vec3, t: f32, ray: &Ray) -> HitRecord {
+        let front_face = ray.direction().dot(outward_normal) > 0.;
+        let normal = if front_face { *outward_normal } else { -outward_normal };
+        HitRecord {
+            p,
+            normal,
+            t,
+            front_face,
+        }
+    }
+}
+
+trait Hittable {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
+}
+
+struct Sphere {
+    center: Point3,
+    radius: f32,
+}
+
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        let oc: Vec3 = r.origin() - self.center;
+        let a: f32 = r.direction().magnitude_squared();
+        let half_b: f32 = oc.dot(&r.direction());
+        let c: f32 = oc.magnitude_squared() - self.radius * self.radius;
+        let discriminant = half_b * half_b - a * c;
+        if discriminant < 0.0 {
+            None
+        } else {
+            let sqrtd = discriminant.sqrt();
+
+            // Find nearest root that lies in acceptable range
+            let mut t = (-half_b - sqrtd) / a;
+            if t < t_min || t_max < t {
+                t = (-half_b + sqrtd) / a;
+                if t < t_min || t_max < t {
+                    return None;
+                }
+            }
+
+            let p = r.at(t);
+            let normal = (p - self.center) / self.radius;
+            Some(HitRecord::new(p, &normal, t, &r))
+        }
+    }
+}
+
+
 fn ray_color(ray: &Ray) -> Color {
-    if hit_sphere(&Point3::new(0., 0., -1.), 0.5, ray) {
-        return Color::new(1.0, 0., 0.);
+    let sphere0 = Sphere {
+        center: Point3::new(0., 0., -1.),
+        radius: 0.5
+    };
+    if let Some(hitrecord) = sphere0.hit(ray, 0., 1000.) {
+        return 0.5 * Color::new(hitrecord.normal.x + 1.0, hitrecord.normal.y + 1.0, hitrecord.normal.z + 1.0);    
     }
     // Ray hits background
     let unit_dir: Vec3 = ray.dir.normalize(); // .y Range: -1 to 1
