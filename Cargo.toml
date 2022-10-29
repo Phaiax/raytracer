@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 image = { version = "0.24.4", default-features = false, features = [ "png" ] }
 indicatif = "0.17.1"
+nalgebra = { version = "0.31.2", default-features = false, features = ["libm"] }
