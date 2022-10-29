@@ -42,6 +42,7 @@ pub fn vec3_random<D: Distribution<f64>, R: Rng>(distr: &D, rng: &mut R) -> Vec3
     )
 }
 
+/// Random vector of length 0..1
 pub fn random_in_unit_sphere<R: Rng>(rng: &mut R) -> Vec3 {
     let dist_m1p1 : Uniform<f64> = Uniform::new(-1.0, 1.0);
     loop {
@@ -50,6 +51,11 @@ pub fn random_in_unit_sphere<R: Rng>(rng: &mut R) -> Vec3 {
             return p;
         }
     }
+}
+
+/// Random vector of length 1
+pub fn random_unit_vector<R: Rng>(rng: &mut R) -> Vec3 {
+    random_in_unit_sphere(rng).normalize()
 }
 
 pub struct Ray {

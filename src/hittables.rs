@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{sync::Arc};
 
 use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
 
@@ -26,7 +26,7 @@ impl HitRecord {
     }
 }
 
-pub trait Hittable {
+pub trait Hittable : Sync + Send {
     fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
@@ -36,8 +36,8 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(cx: f64, cy: f64, cz: f64, r: f64) -> Rc<dyn Hittable> {
-        Rc::new(Sphere {
+    pub fn new(cx: f64, cy: f64, cz: f64, r: f64) -> Arc<dyn Hittable> {
+        Arc::new(Sphere {
             center : Point3::new(cx, cy, cz),
             radius: r,
         })

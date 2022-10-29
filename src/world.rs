@@ -1,10 +1,10 @@
 
-use std::rc::Rc;
+use std::{sync::Arc};
 
 use crate::{hittables::{Hittable, HitRecord}, util::Ray};
 
 pub struct World {
-	objects: Vec<Rc<dyn Hittable>>,
+	objects: Vec<Arc<dyn Hittable>>,
 }
 
 impl World {
@@ -12,7 +12,7 @@ impl World {
 		World { objects: vec![] }
 	}
 
-	pub fn add(&mut self, hittable: Rc<dyn Hittable>) {
+	pub fn add(&mut self, hittable: Arc<dyn Hittable>) {
 		self.objects.push(hittable)
 	}
 
