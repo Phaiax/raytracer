@@ -50,8 +50,8 @@ pub fn raytracer() {
 
     let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
     let material_center = Lambertian::new(Color::new(0.7, 0.3, 0.3));
-    let material_left   = Metal::new(Color::new(0.8, 0.8, 0.8));
-    let material_right  = Metal::new(Color::new(0.8, 0.6, 0.2));
+    let material_left   = Metal::new(Color::new(0.8, 0.8, 0.8), 0.3);
+    let material_right  = Metal::new(Color::new(0.8, 0.6, 0.2), 1.0);
 
     let mut world = World::new();
     world.add(Sphere::new( 0.0, -100.5, -1.0, 100.0, &material_ground));
