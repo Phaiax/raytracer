@@ -1,16 +1,24 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
+use crate::material::Material;
 use crate::util::{AsRgb, Color, Point3, Ray, Vec3};
 
 pub struct HitRecord {
     pub p: Point3,
     pub normal: Vec3,
+    pub material: Arc<dyn Material>,
     pub t: f64,
     pub front_face: bool,
 }
 
 impl HitRecord {
-    pub fn new(p: Vec3, outward_normal: &Vec3, t: f64, ray: &Ray) -> HitRecord {
+    pub fn new(
+        p: Vec3,
+        outward_normal: &Vec3,
+        material: &Arc<dyn Material>,
+        t: f64,
+        ray: &Ray,
+    ) -> HitRecord {
         let front_face = ray.direction().dot(outward_normal) < 0.;
         let normal = if front_face {
             *outward_normal
@@ -20,26 +28,35 @@ impl HitRecord {
         HitRecord {
             p,
             normal,
+            material: material.clone(),
             t,
             front_face,
         }
     }
 }
 
-pub trait Hittable : Sync + Send {
+pub trait Hittable: Sync + Send {
     fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
 pub struct Sphere {
     pub center: Point3,
     pub radius: f64,
+    pub material: Arc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(cx: f64, cy: f64, cz: f64, r: f64) -> Arc<dyn Hittable> {
+    pub fn new(
+        cx: f64,
+        cy: f64,
+        cz: f64,
+        r: f64,
+        material: &Arc<dyn Material>,
+    ) -> Arc<dyn Hittable> {
         Arc::new(Sphere {
-            center : Point3::new(cx, cy, cz),
+            center: Point3::new(cx, cy, cz),
             radius: r,
+            material: material.clone(),
         })
     }
 }
@@ -67,7 +84,7 @@ impl Hittable for Sphere {
 
             let p = r.at(t);
             let normal = (p - self.center) / self.radius;
-            Some(HitRecord::new(p, &normal, t, &r))
+            Some(HitRecord::new(p, &normal, &self.material, t, &r))
         }
     }
 }

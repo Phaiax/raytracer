@@ -58,6 +58,11 @@ pub fn random_unit_vector<R: Rng>(rng: &mut R) -> Vec3 {
     random_in_unit_sphere(rng).normalize()
 }
 
+pub fn near_zero(vec: &Vec3) -> bool {
+    let s = 1e-8;
+    vec.x.abs() < s && vec.y.abs() < s && vec.z.abs() < s
+}
+
 pub struct Ray {
     pub orig: Point3,
     pub dir: Vec3,

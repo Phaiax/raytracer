@@ -14,6 +14,7 @@
 
 mod camera;
 mod hittables;
+mod material;
 mod playground;
 mod util;
 mod world;
@@ -27,6 +28,7 @@ use crate::util::{random_unit_vector, AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
+use material::Lambertian;
 use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
@@ -45,9 +47,11 @@ pub fn raytracer() {
 
     // World
 
+    let matte = Lambertian::new(Color::new(0.5, 0.7, 0.9));
+
     let mut world = World::new();
-    world.add(Sphere::new(0., 0., -1., 0.5));
-    world.add(Sphere::new(0., -100.5, -1., 100.));
+    world.add(Sphere::new(0., 0., -1., 0.5, &matte));
+    world.add(Sphere::new(0., -100.5, -1., 100., &matte));
 
     let camera = Camera::new(ASPECT_RATIO);
 
@@ -82,14 +86,9 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
     }
 
     if let Some(hitrecord) = world.hit(ray, 0.001, 1000.) {
-        let target = hitrecord.p + hitrecord.normal + random_unit_vector(rng);
-        return 0.5
-            * ray_color(
-                &Ray::new(hitrecord.p, target - hitrecord.p),
-                world,
-                depth - 1,
-                rng,
-            );
+        if let Some((attenuation, scatterray)) = hitrecord.material.scatter(ray, &hitrecord, rng) {
+            return attenuation.component_mul(&ray_color(&scatterray, world, depth - 1, rng));
+        }
     }
     // Ray hits background
     let unit_dir: Vec3 = ray.direction().normalize(); // .y Range: -1 to 1
