@@ -28,7 +28,7 @@ use crate::util::{random_unit_vector, AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
-use material::Lambertian;
+use material::{Lambertian, Metal};
 use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
@@ -47,11 +47,24 @@ pub fn raytracer() {
 
     // World
 
-    let matte = Lambertian::new(Color::new(0.5, 0.7, 0.9));
+
+    let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
+    let material_center = Lambertian::new(Color::new(0.7, 0.3, 0.3));
+    let material_left   = Metal::new(Color::new(0.8, 0.8, 0.8));
+    let material_right  = Metal::new(Color::new(0.8, 0.6, 0.2));
 
     let mut world = World::new();
-    world.add(Sphere::new(0., 0., -1., 0.5, &matte));
-    world.add(Sphere::new(0., -100.5, -1., 100., &matte));
+    world.add(Sphere::new( 0.0, -100.5, -1.0, 100.0, &material_ground));
+    world.add(Sphere::new( 0.0,    0.0, -1.0,   0.5, &material_center));
+    world.add(Sphere::new(-1.0,    0.0, -1.0,   0.5, &material_left));
+    world.add(Sphere::new( 1.0,    0.0, -1.0,   0.5, &material_right));
+
+
+    // let matte = Lambertian::new(Color::new(0.5, 0.7, 0.9));
+
+    // let mut world = World::new();
+    // world.add(Sphere::new(0., 0., -1., 0.5, &matte));
+    // world.add(Sphere::new(0., -100.5, -1., 100., &matte));
 
     let camera = Camera::new(ASPECT_RATIO);
 
@@ -88,6 +101,8 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
     if let Some(hitrecord) = world.hit(ray, 0.001, 1000.) {
         if let Some((attenuation, scatterray)) = hitrecord.material.scatter(ray, &hitrecord, rng) {
             return attenuation.component_mul(&ray_color(&scatterray, world, depth - 1, rng));
+        } else {
+            return Color::zeros();
         }
     }
     // Ray hits background

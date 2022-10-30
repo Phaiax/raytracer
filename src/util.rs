@@ -85,3 +85,8 @@ impl Ray {
         self.dir
     }
 }
+
+/// Return reflection of v on surface with normal vector n
+pub fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
+    v - 2.0 * v.dot(n) * n
+}
