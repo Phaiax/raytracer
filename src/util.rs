@@ -55,6 +55,17 @@ pub fn random_unit_vector<R: Rng>(rng: &mut R) -> Vec3 {
     random_in_unit_sphere(rng).normalize()
 }
 
+/// Random vector of length 0..1 with z=0
+pub fn random_in_unit_disk<R: Rng>(rng: &mut R) -> Vec3 {
+    let dist_m1p1: Uniform<f64> = Uniform::new(-1.0, 1.0);
+    loop {
+        let p = Vector3::new(dist_m1p1.sample(rng), dist_m1p1.sample(rng), 0.0);
+        if p.magnitude_squared() < 1.0 {
+            return p;
+        }
+    }
+}
+
 pub fn near_zero(vec: &Vec3) -> bool {
     let s = 1e-8;
     vec.x.abs() < s && vec.y.abs() < s && vec.z.abs() < s

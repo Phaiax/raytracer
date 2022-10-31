@@ -65,12 +65,16 @@ pub fn raytracer() {
     // world.add(Sphere::new(0., 0., -1., 0.5, &matte));
     // world.add(Sphere::new(0., -100.5, -1., 100., &matte));
 
+    let lookfrom = Point3::new(3.0, 3.0, 2.0);
+    let lookat = Point3::new(0.0, 0.0, -1.0);
     let camera = Camera::new(
-        Point3::new(-2.0, 2.0, 1.0),
-        Point3::new(0.0, 0.0, -1.0),
+        lookfrom,
+        lookat,
         Vec3::new(0.0, 1.0, 0.0),
         20.0,
         ASPECT_RATIO,
+        2.0, // aperture
+        (lookfrom - lookat).magnitude(),
     );
 
     let range = 0..IMAGE_HEIGHT;
@@ -82,7 +86,7 @@ pub fn raytracer() {
             for _ in 0..SAMPLES_PER_PIXEL {
                 let u = (x as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f64;
                 let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f64;
-                let ray = camera.get_ray(u, v);
+                let ray = camera.get_ray(u, v, &mut small_rng);
                 c += ray_color(&ray, &world, MAX_DEPTH, &mut small_rng);
             }
             img.lock().unwrap().put_pixel(

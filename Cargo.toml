@@ -7,7 +7,7 @@ edition = "2021"
 
 [profile.dev]
 opt-level = 3
-lto = true
+lto = false
 
 [dependencies]
 image = { version = "0.24.4", default-features = false, features = ["png"] }
