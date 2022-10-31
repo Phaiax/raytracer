@@ -19,6 +19,7 @@ mod playground;
 mod util;
 mod world;
 
+use std::f64::consts::PI;
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -47,18 +48,15 @@ pub fn raytracer() {
 
     // World
 
-    let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
-    let material_center = Lambertian::new(Color::new(0.1, 0.2, 0.5));
-    // let material_center = Dielectric::new(1.5);
-    let material_left = Dielectric::new(1.5);
-    let material_right = Metal::new(Color::new(0.8, 0.6, 0.2), 0.0);
+    let r = (PI / 4.0).cos();
+    let material_left = Lambertian::new(Color::new(0.0, 0.0, 1.0));
+    let material_right = Lambertian::new(Color::new(1.0, 0.0, 0.0));
 
     let mut world = World::new();
-    world.add(Sphere::new(0.0, -100.5, -1.0, 100.0, &material_ground));
-    world.add(Sphere::new(0.0, 0.0, -1.0, 0.5, &material_center));
-    world.add(Sphere::new(-1.0, 0.0, -1.0, 0.5, &material_left));
-    world.add(Sphere::new(-1.0, 0.0, -1.0, -0.4, &material_left));
-    world.add(Sphere::new(1.0, 0.0, -1.0, 0.5, &material_right));
+    world.add(Sphere::new(-r, 0.0, -1.0, r, &material_left));
+    world.add(Sphere::new( r, 0.0, -1.0, r, &material_right));
+
+
 
     // let matte = Lambertian::new(Color::new(0.5, 0.7, 0.9));
 
@@ -66,7 +64,7 @@ pub fn raytracer() {
     // world.add(Sphere::new(0., 0., -1., 0.5, &matte));
     // world.add(Sphere::new(0., -100.5, -1., 100., &matte));
 
-    let camera = Camera::new(ASPECT_RATIO);
+    let camera = Camera::new(90.0, ASPECT_RATIO);
 
     let range = 0..IMAGE_HEIGHT;
     range.into_par_iter().for_each(|y| {
