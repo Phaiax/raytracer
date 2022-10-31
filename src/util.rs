@@ -1,10 +1,11 @@
 use std::cell::RefCell;
+use std::ops::Neg;
 
 use image::Rgb;
 use nalgebra::Vector3;
 
-use rand::prelude::{Rng, Distribution};
 use rand::distributions::Uniform;
+use rand::prelude::{Distribution, Rng};
 
 pub type Vec3 = Vector3<f64>;
 pub type Color = Vec3;
@@ -35,16 +36,12 @@ impl AsRgb for Color {
 }
 
 pub fn vec3_random<D: Distribution<f64>, R: Rng>(distr: &D, rng: &mut R) -> Vec3 {
-    Vec3::new(
-        distr.sample(rng),
-        distr.sample(rng),
-        distr.sample(rng),
-    )
+    Vec3::new(distr.sample(rng), distr.sample(rng), distr.sample(rng))
 }
 
 /// Random vector of length 0..1
 pub fn random_in_unit_sphere<R: Rng>(rng: &mut R) -> Vec3 {
-    let dist_m1p1 : Uniform<f64> = Uniform::new(-1.0, 1.0);
+    let dist_m1p1: Uniform<f64> = Uniform::new(-1.0, 1.0);
     loop {
         let p = vec3_random(&dist_m1p1, rng);
         if p.magnitude_squared() < 1. {
@@ -89,4 +86,11 @@ impl Ray {
 /// Return reflection of v on surface with normal vector n
 pub fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
     v - 2.0 * v.dot(n) * n
+}
+
+pub fn refract(uv: &Vec3, n: &Vec3, etai_over_etat: f64) -> Vec3 {
+    let cos_theta = (-uv).dot(n).min(1.0);
+    let r_out_perp = etai_over_etat * (uv + cos_theta * n);
+    let r_out_parallel = (1.0 - r_out_perp.magnitude_squared()).abs().sqrt().neg() * n;
+    r_out_perp + r_out_parallel
 }
