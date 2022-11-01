@@ -27,8 +27,10 @@ use crate::camera::Camera;
 use crate::hittables::{Hittable, Sphere};
 use crate::util::{random_unit_vector, AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
+use camera::CameraBuilder;
+use clap::Parser;
 use hittables::Cylinder;
-use image::{ImageBuffer, RgbImage};
+use image::{ImageBuffer, RgbaImage};
 use indicatif::ProgressBar;
 use material::{Dielectric, Lambertian, Metal};
 use rand::distributions::Uniform;
@@ -36,14 +38,15 @@ use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
-use util::vec3_random;
-use clap::Parser;
+use util::{vec3_random, ProgressBarWrapper};
 
 #[derive(Parser, Debug)]
 #[command(version)]
 pub struct Args {
     #[command(flatten)]
     raytrace_params: RaytraceParams,
+    #[arg(short, long, default_value = "output.png")]
+    output_filename: String,
 }
 
 #[derive(Parser, Debug)]
@@ -59,27 +62,16 @@ pub struct RaytraceParams {
     pub max_depth: u32,
 }
 
-pub fn raytracer(params: RaytraceParams) {
+pub fn render(
+    params: &RaytraceParams,
+    world: &World,
+    camera: &Camera,
+    progress: &Box<dyn ProgressBarWrapper>,
+) -> RgbaImage {
     let image_height: u32 = (params.image_width as f64 / params.aspect_ratio) as u32;
+    progress.set_length(image_height as u64);
 
-    let img: Mutex<RgbImage> = Mutex::new(ImageBuffer::new(params.image_width, image_height));
-    let bar = ProgressBar::new(image_height as u64);
-
-    // World
-    let world = scene_cylinder();
-
-    // Camera
-    let lookfrom = Point3::new(0.0, 0.0, 1.0);
-    let lookat = Point3::new(0.0, 0.0, -1.0);
-    let camera = Camera::new(
-        lookfrom,
-        lookat,
-        Vec3::new(0.0, 1.0, 0.0),
-        90.0,
-        params.aspect_ratio,
-        0.0, // aperture
-        10.0, // dist_to_focus
-    );
+    let img: Mutex<RgbaImage> = Mutex::new(ImageBuffer::new(params.image_width, image_height));
 
     let range = 0..image_height;
     range.into_par_iter().for_each(|y| {
@@ -97,17 +89,17 @@ pub fn raytracer(params: RaytraceParams) {
             img.lock().unwrap().put_pixel(
                 x,
                 image_height - 1 - y,
-                c.as_rgb_multisample(params.samples_per_pixel),
+                c.as_rgba_multisample(params.samples_per_pixel),
             ); // Image uses inverse y axis direction
         }
-        bar.inc(1);
+        progress.inc(1);
     });
-    bar.finish();
+    progress.finish();
 
-    img.lock().unwrap().save("output.png").unwrap();
+    img.into_inner().unwrap()
 }
 
-fn scene_chapter13() -> World {
+fn scene_chapter13() -> (World, CameraBuilder) {
     let mut world = World::new();
     let mut small_rng = SmallRng::seed_from_u64(23428359242 as u64);
     let distr_0_1: Uniform<f64> = Uniform::new(0.0, 1.0);
@@ -174,10 +166,19 @@ fn scene_chapter13() -> World {
     let material3 = Metal::new(Color::new(0.7, 0.6, 0.5), 0.0);
     world.add(Sphere::new(4.0, 1.0, 0.0, 1.0, &material3));
 
-    world
+    let mut camera = CameraBuilder::new();
+    camera
+        .lookfrom(Point3::new(13.0, 2.0, 3.0))
+        .lookat(Point3::new(0.0, 0.0, 0.0))
+        .vup(Vec3::new(0.0, 1.0, 0.0))
+        .vfov(20.0)
+        .aperture(0.1)
+        .focus_dist(10.0);
+
+    (world, camera)
 }
 
-fn scene_tutorial() -> World {
+fn scene_tutorial() -> (World, CameraBuilder) {
     let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
     let material_center = Lambertian::new(Color::new(0.1, 0.2, 0.5));
     let material_left = Dielectric::new(1.5);
@@ -189,11 +190,21 @@ fn scene_tutorial() -> World {
     world.add(Sphere::new(-1.0, 0.0, -1.0, 0.5, &material_left));
     world.add(Sphere::new(-1.0, 0.0, -1.0, -0.45, &material_left));
     world.add(Sphere::new(1.0, 0.0, -1.0, 0.5, &material_right));
-    world
+
+    let mut camera = CameraBuilder::new();
+    camera
+        .lookfrom(Point3::new(0.0, 0.0, 1.0))
+        .lookat(Point3::new(0.0, 0.0, -1.0))
+        .vup(Vec3::new(0.0, 1.0, 0.0))
+        .vfov(90.0)
+        .aperture(0.0)
+        .focus_dist(10.0);
+
+    (world, camera)    
 }
 
 #[allow(unused_variables)]
-fn scene_cylinder() -> World {
+fn scene_cylinder() -> (World, CameraBuilder) {
     let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
     let material_center = Lambertian::new(Color::new(0.1, 0.2, 0.5));
     let material_left = Dielectric::new(1.5);
@@ -207,8 +218,23 @@ fn scene_cylinder() -> World {
     world.add(Sphere::new(-1.0, 0.0, -1.0, -0.45, &material_left));
     world.add(Sphere::new(1.0, 0.0, -1.0, 0.5, &material_right));
 
-    world.add(Cylinder::new(Point3::new(0.0, 0.2, -1.0), Vec3::new(0.0, 1.0, 0.0), 0.1, &material_red));
-    world
+    world.add(Cylinder::new(
+        Point3::new(0.0, 0.2, -1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        0.1,
+        &material_red,
+    ));
+
+    let mut camera = CameraBuilder::new();
+    camera
+        .lookfrom(Point3::new(0.0, 0.0, 1.0))
+        .lookat(Point3::new(0.0, 0.0, -1.0))
+        .vup(Vec3::new(0.0, 1.0, 0.0))
+        .vfov(90.0)
+        .aperture(0.0)
+        .focus_dist(10.0);
+
+    (world, camera)  
 }
 
 fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color {
@@ -245,5 +271,11 @@ fn main() {
     // playground::test_ray_cylinder_math();
 
     let args = Args::parse();
-    raytracer(args.raytrace_params);
+
+    // World and Camera
+    let (world, mut default_camera_builder) = scene_cylinder();
+    let camera = default_camera_builder.aspect_ratio(args.raytrace_params.aspect_ratio).build().unwrap();
+        let progress: Box<dyn ProgressBarWrapper> = Box::new(ProgressBar::new(1));
+        let img = render(&args.raytrace_params, &world, &camera, &progress);
+        img.save(args.output_filename).expect("Could not save file.");
 }

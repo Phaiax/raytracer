@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::ops::Neg;
 
-use image::Rgb;
+use image::{Rgb, Rgba};
+use indicatif::ProgressBar;
 use nalgebra::Vector3;
 
 use rand::distributions::Uniform;
@@ -14,6 +15,7 @@ pub type Point3 = Vec3;
 pub trait AsRgb {
     fn as_rgb(self) -> Rgb<u8>;
     fn as_rgb_multisample(self, samples_per_pixel: u32) -> Rgb<u8>;
+    fn as_rgba_multisample(self, samples_per_pixel: u32) -> Rgba<u8>;
 }
 
 impl AsRgb for Color {
@@ -31,6 +33,16 @@ impl AsRgb for Color {
             ((self.x * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
             ((self.y * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
             ((self.z * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+        ])
+    }
+
+    fn as_rgba_multisample(self, samples_per_pixel: u32) -> Rgba<u8> {
+        let scale = 1.0 / samples_per_pixel as f64;
+        Rgba([
+            ((self.x * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            ((self.y * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            ((self.z * scale).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            255,
         ])
     }
 }
@@ -104,4 +116,25 @@ pub fn refract(uv: &Vec3, n: &Vec3, etai_over_etat: f64) -> Vec3 {
     let r_out_perp = etai_over_etat * (uv + cos_theta * n);
     let r_out_parallel = (1.0 - r_out_perp.magnitude_squared()).abs().sqrt().neg() * n;
     r_out_perp + r_out_parallel
+}
+
+
+pub trait ProgressBarWrapper : Send + Sync {
+    fn set_length(&self, len: u64);
+    fn inc(&self, delta: u64);
+    fn finish(&self);
+}
+
+impl ProgressBarWrapper for ProgressBar {
+    fn set_length(&self, len: u64) {
+        self.set_length(len);
+    }
+
+    fn inc(&self, delta: u64) {
+        self.inc(delta);
+    }
+
+    fn finish(&self) {
+        self.finish();
+    }
 }

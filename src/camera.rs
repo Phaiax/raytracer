@@ -2,6 +2,71 @@ use rand::rngs::SmallRng;
 
 use crate::util::{random_in_unit_disk, AsRgb, Color, Point3, Ray, Vec3};
 
+#[derive(Clone)]
+pub struct CameraBuilder {
+    pub lookfrom: Option<Point3>,
+    pub lookat: Option<Point3>,
+    pub vup: Option<Vec3>,
+    pub vfov: Option<f64>,
+    pub aspect_ratio: Option<f64>,
+    pub aperture: Option<f64>,
+    pub focus_dist: Option<f64>,
+}
+
+impl CameraBuilder {
+    pub fn new() -> Self {
+        CameraBuilder {
+            lookfrom: None,
+            lookat: None,
+            vup: None,
+            vfov: None,
+            aspect_ratio: None,
+            aperture: None,
+            focus_dist: None,
+        }
+    }
+    pub fn lookfrom(&mut self, lookfrom: Point3) -> &mut Self {
+        self.lookfrom = Some(lookfrom);
+        self
+    }
+    pub fn lookat(&mut self, lookat: Point3) -> &mut Self {
+        self.lookat = Some(lookat);
+        self
+    }
+    pub fn vup(&mut self, vup: Vec3) -> &mut Self {
+        self.vup = Some(vup);
+        self
+    }
+    pub fn vfov(&mut self, vfov: f64) -> &mut Self {
+        self.vfov = Some(vfov);
+        self
+    }
+    pub fn aspect_ratio(&mut self, aspect_ratio: f64) -> &mut Self {
+        self.aspect_ratio = Some(aspect_ratio);
+        self
+    }
+    pub fn aperture(&mut self, aperture: f64) -> &mut Self {
+        self.aperture = Some(aperture);
+        self
+    }
+    pub fn focus_dist(&mut self, focus_dist: f64) -> &mut Self {
+        self.focus_dist = Some(focus_dist);
+        self
+    }
+    pub fn build(&self) -> Option<Camera> {
+        Some(Camera::new(
+            self.lookfrom?,
+            self.lookat?,
+            self.vup?,
+            self.vfov?,
+            self.aspect_ratio?,
+            self.aperture?,
+            self.focus_dist?,
+        ))
+    }
+}
+
+#[derive(Clone)]
 pub struct Camera {
     /// Eye
     origin: Point3,
