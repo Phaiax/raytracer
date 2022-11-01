@@ -16,3 +16,4 @@ nalgebra = { version = "0.31.2", default-features = false, features = ["libm"] }
 rand = { version = "0.8.5", default-features = false, features = ["small_rng"] }
 rayon = "1.5.3"
 approx = "*"
+clap = { version = "4.0.18", features = ["derive"] }

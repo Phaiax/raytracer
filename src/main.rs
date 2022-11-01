@@ -19,6 +19,7 @@ mod playground;
 mod util;
 mod world;
 
+use std::error::Error;
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -36,16 +37,33 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use util::vec3_random;
+use clap::Parser;
 
-const ASPECT_RATIO: f64 = 3.0 / 2.0;
-const IMAGE_WIDTH: u32 = 400;
-const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u32;
-const SAMPLES_PER_PIXEL: u32 = 10;
-const MAX_DEPTH: u32 = 50;
+#[derive(Parser, Debug)]
+#[command(version)]
+pub struct Args {
+   #[command(flatten)]
+   raytrace_params: RaytraceParams,
+}
 
-pub fn raytracer() {
-    let img: Mutex<RgbImage> = Mutex::new(ImageBuffer::new(IMAGE_WIDTH, IMAGE_HEIGHT));
-    let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
+#[derive(Parser, Debug)]
+#[command()]
+pub struct RaytraceParams {
+   #[arg(short, long = "width", default_value_t = 400)]
+   pub image_width: u32,
+   #[arg(short, long, default_value = "16:9", value_parser = parse_aspect_ratio)]
+   pub aspect_ratio: f64,
+   #[arg(short, long, default_value_t = 10)]
+   pub samples_per_pixel: u32,
+   #[arg(short, long, default_value_t = 50)]
+   pub max_depth: u32,
+}
+
+pub fn raytracer(params: RaytraceParams) {
+    let image_height: u32 = (params.image_width as f64 / params.aspect_ratio) as u32;
+
+    let img: Mutex<RgbImage> = Mutex::new(ImageBuffer::new(params.image_width, image_height));
+    let bar = ProgressBar::new(image_height as u64);
 
     // World
     let world = scene_cylinder();
@@ -58,27 +76,27 @@ pub fn raytracer() {
         lookat,
         Vec3::new(0.0, 1.0, 0.0),
         90.0,
-        ASPECT_RATIO,
+        params.aspect_ratio,
         0.0, // aperture
         10.0, // dist_to_focus
     );
 
-    let range = 0..IMAGE_HEIGHT;
+    let range = 0..image_height;
     range.into_par_iter().for_each(|y| {
         let mut small_rng = SmallRng::seed_from_u64(232008239771 + y as u64);
         let rn_distr: Uniform<f64> = Uniform::new(0.0, 1.0);
-        for x in 0..IMAGE_WIDTH {
+        for x in 0..params.image_width {
             let mut c = Color::zeros();
-            for _ in 0..SAMPLES_PER_PIXEL {
-                let u = (x as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_WIDTH - 1) as f64;
-                let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (IMAGE_HEIGHT - 1) as f64;
+            for _ in 0..params.samples_per_pixel {
+                let u = (x as f64 + rn_distr.sample(&mut small_rng)) / (params.image_width - 1) as f64;
+                let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (image_height - 1) as f64;
                 let ray = camera.get_ray(u, v, &mut small_rng);
-                c += ray_color(&ray, &world, MAX_DEPTH, &mut small_rng);
+                c += ray_color(&ray, &world, params.max_depth, &mut small_rng);
             }
             img.lock().unwrap().put_pixel(
                 x,
-                IMAGE_HEIGHT - 1 - y,
-                c.as_rgb_multisample(SAMPLES_PER_PIXEL),
+                image_height - 1 - y,
+                c.as_rgb_multisample(params.samples_per_pixel),
             ); // Image uses inverse y axis direction
         }
         bar.inc(1);
@@ -192,9 +210,19 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
     (1. - t) * Color::new(1., 1., 1.) + t * Color::new(0.5, 0.7, 1.0) // blend
 }
 
+fn parse_aspect_ratio<'a>(aspect_ratio: &'a str) -> Result<f64, Box<dyn Error + Send + Sync + 'static>> {
+    let err = "Aspect ratio format is: '<w>:<h>', e.g.: '16:9'";
+    let mut aspect_ratio = aspect_ratio.split(":");
+    let w : f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
+    let h : f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
+    Ok(w/h)
+}
+
 fn main() {
     // playground::test_image();
     // playground::test_vectormath();
     // playground::test_ray_cylinder_math();
-    raytracer();
+
+    let args = Args::parse();
+    raytracer(args.raytrace_params);
 }
