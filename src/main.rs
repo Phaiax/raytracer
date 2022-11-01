@@ -42,21 +42,21 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version)]
 pub struct Args {
-   #[command(flatten)]
-   raytrace_params: RaytraceParams,
+    #[command(flatten)]
+    raytrace_params: RaytraceParams,
 }
 
 #[derive(Parser, Debug)]
 #[command()]
 pub struct RaytraceParams {
-   #[arg(short, long = "width", default_value_t = 400)]
-   pub image_width: u32,
-   #[arg(short, long, default_value = "16:9", value_parser = parse_aspect_ratio)]
-   pub aspect_ratio: f64,
-   #[arg(short, long, default_value_t = 10)]
-   pub samples_per_pixel: u32,
-   #[arg(short, long, default_value_t = 50)]
-   pub max_depth: u32,
+    #[arg(short, long = "width", default_value_t = 400)]
+    pub image_width: u32,
+    #[arg(short, long, default_value = "16:9", value_parser = parse_aspect_ratio)]
+    pub aspect_ratio: f64,
+    #[arg(short, long, default_value_t = 10)]
+    pub samples_per_pixel: u32,
+    #[arg(short, long, default_value_t = 50)]
+    pub max_depth: u32,
 }
 
 pub fn raytracer(params: RaytraceParams) {
@@ -88,7 +88,8 @@ pub fn raytracer(params: RaytraceParams) {
         for x in 0..params.image_width {
             let mut c = Color::zeros();
             for _ in 0..params.samples_per_pixel {
-                let u = (x as f64 + rn_distr.sample(&mut small_rng)) / (params.image_width - 1) as f64;
+                let u =
+                    (x as f64 + rn_distr.sample(&mut small_rng)) / (params.image_width - 1) as f64;
                 let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (image_height - 1) as f64;
                 let ray = camera.get_ray(u, v, &mut small_rng);
                 c += ray_color(&ray, &world, params.max_depth, &mut small_rng);
@@ -130,17 +131,35 @@ fn scene_chapter13() -> World {
                     let albedo: Color = vec3_random(&distr_0_1, &mut small_rng)
                         .component_mul(&vec3_random(&distr_0_1, &mut small_rng));
                     let sphere_material = Lambertian::new(albedo);
-                    world.add(Sphere::new(center.x, center.y, center.z, 0.2, &sphere_material));
+                    world.add(Sphere::new(
+                        center.x,
+                        center.y,
+                        center.z,
+                        0.2,
+                        &sphere_material,
+                    ));
                 } else if choose_mat < 0.95 {
                     // metal
                     let albedo: Color = vec3_random(&distr_0p5_1, &mut small_rng);
                     let fuzz = distr_0_1.sample(&mut small_rng) / 2.0;
                     let sphere_material = Metal::new(albedo, fuzz);
-                    world.add(Sphere::new(center.x, center.y, center.z, 0.2, &sphere_material));
+                    world.add(Sphere::new(
+                        center.x,
+                        center.y,
+                        center.z,
+                        0.2,
+                        &sphere_material,
+                    ));
                 } else {
                     // glass
                     let sphere_material = Dielectric::new(1.5);
-                    world.add(Sphere::new(center.x, center.y, center.z, 0.2, &sphere_material));
+                    world.add(Sphere::new(
+                        center.x,
+                        center.y,
+                        center.z,
+                        0.2,
+                        &sphere_material,
+                    ));
                 }
             }
         }
@@ -210,12 +229,14 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
     (1. - t) * Color::new(1., 1., 1.) + t * Color::new(0.5, 0.7, 1.0) // blend
 }
 
-fn parse_aspect_ratio<'a>(aspect_ratio: &'a str) -> Result<f64, Box<dyn Error + Send + Sync + 'static>> {
+fn parse_aspect_ratio<'a>(
+    aspect_ratio: &'a str,
+) -> Result<f64, Box<dyn Error + Send + Sync + 'static>> {
     let err = "Aspect ratio format is: '<w>:<h>', e.g.: '16:9'";
     let mut aspect_ratio = aspect_ratio.split(":");
-    let w : f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
-    let h : f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
-    Ok(w/h)
+    let w: f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
+    let h: f64 = aspect_ratio.next().ok_or(err)?.parse().map_err(|_| err)?;
+    Ok(w / h)
 }
 
 fn main() {
