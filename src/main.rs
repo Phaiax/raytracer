@@ -26,6 +26,7 @@ use crate::camera::Camera;
 use crate::hittables::{Hittable, Sphere};
 use crate::util::{random_unit_vector, AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
+use hittables::Cylinder;
 use image::{ImageBuffer, RgbImage};
 use indicatif::ProgressBar;
 use material::{Dielectric, Lambertian, Metal};
@@ -37,9 +38,9 @@ use rayon::prelude::*;
 use util::vec3_random;
 
 const ASPECT_RATIO: f64 = 3.0 / 2.0;
-const IMAGE_WIDTH: u32 = 1200;
+const IMAGE_WIDTH: u32 = 400;
 const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u32;
-const SAMPLES_PER_PIXEL: u32 = 500;
+const SAMPLES_PER_PIXEL: u32 = 10;
 const MAX_DEPTH: u32 = 50;
 
 pub fn raytracer() {
@@ -47,18 +48,18 @@ pub fn raytracer() {
     let bar = ProgressBar::new(IMAGE_HEIGHT as u64);
 
     // World
-    let world = scene_chapter13();
+    let world = scene_cylinder();
 
     // Camera
-    let lookfrom = Point3::new(13.0, 2.0, 3.0);
-    let lookat = Point3::new(0.0, 0.0, 0.0);
+    let lookfrom = Point3::new(0.0, 0.0, 1.0);
+    let lookat = Point3::new(0.0, 0.0, -1.0);
     let camera = Camera::new(
         lookfrom,
         lookat,
         Vec3::new(0.0, 1.0, 0.0),
-        20.0,
+        90.0,
         ASPECT_RATIO,
-        0.1, // aperture
+        0.0, // aperture
         10.0, // dist_to_focus
     );
 
@@ -154,6 +155,25 @@ fn scene_tutorial() -> World {
     world
 }
 
+#[allow(unused_variables)]
+fn scene_cylinder() -> World {
+    let material_ground = Lambertian::new(Color::new(0.8, 0.8, 0.0));
+    let material_center = Lambertian::new(Color::new(0.1, 0.2, 0.5));
+    let material_left = Dielectric::new(1.5);
+    let material_right = Metal::new(Color::new(0.8, 0.6, 0.2), 0.0);
+    let material_red = Lambertian::new(Color::new(1.0, 0.0, 0.0));
+
+    let mut world = World::new();
+    world.add(Sphere::new(0.0, -100.5, -1.0, 100.0, &material_ground));
+    // world.add(Sphere::new(0.0, 0.0, -1.0, 0.5, &material_center));
+    world.add(Sphere::new(-1.0, 0.0, -1.0, 0.5, &material_left));
+    world.add(Sphere::new(-1.0, 0.0, -1.0, -0.45, &material_left));
+    world.add(Sphere::new(1.0, 0.0, -1.0, 0.5, &material_right));
+
+    world.add(Cylinder::new(Point3::new(0.0, 0.2, -1.0), Vec3::new(0.0, 1.0, 0.0), 0.1, &material_red));
+    world
+}
+
 fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color {
     if depth == 0 {
         return Color::zeros();
@@ -175,6 +195,6 @@ fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color 
 fn main() {
     // playground::test_image();
     // playground::test_vectormath();
-
+    // playground::test_ray_cylinder_math();
     raytracer();
 }
