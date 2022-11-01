@@ -13,6 +13,7 @@
 #![allow(dead_code, unused_imports)]
 
 mod camera;
+mod gui;
 mod hittables;
 mod material;
 mod playground;
@@ -47,9 +48,11 @@ pub struct Args {
     raytrace_params: RaytraceParams,
     #[arg(short, long, default_value = "output.png")]
     output_filename: String,
+    #[arg(short, long, default_value_t = false)]
+    gui: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command()]
 pub struct RaytraceParams {
     #[arg(short, long = "width", default_value_t = 400)]
@@ -275,7 +278,12 @@ fn main() {
     // World and Camera
     let (world, mut default_camera_builder) = scene_cylinder();
     let camera = default_camera_builder.aspect_ratio(args.raytrace_params.aspect_ratio).build().unwrap();
+
+    if args.gui {
+        crate::gui::run_gui(args.raytrace_params, world, camera);
+    } else {
         let progress: Box<dyn ProgressBarWrapper> = Box::new(ProgressBar::new(1));
         let img = render(&args.raytrace_params, &world, &camera, &progress);
         img.save(args.output_filename).expect("Could not save file.");
+    }
 }
