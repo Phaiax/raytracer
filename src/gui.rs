@@ -30,8 +30,8 @@ struct RaytracerApp {
 }
 
 struct ProgressInfo {
+    current: AtomicU64,
     len: AtomicU64,
-    progress: AtomicU64,
     finished: AtomicBool,
     immediate_image: Mutex<Option<ColorImage>>,
     ctx: egui::Context,
@@ -40,12 +40,17 @@ struct ProgressInfo {
 impl ProgressInfo {
     fn new(ctx: egui::Context) -> Self {
         ProgressInfo {
+            current: 0.into(),
             len: 0.into(),
-            progress: 0.into(),
             finished: false.into(),
             immediate_image: Mutex::new(None),
             ctx,
         }
+    }
+
+    fn percentage(&self) -> f32 {
+        self.current.load(std::sync::atomic::Ordering::Relaxed) as f32
+            / self.len.load(std::sync::atomic::Ordering::Relaxed) as f32
     }
 }
 
@@ -56,7 +61,7 @@ impl ProgressBarWrapper for Arc<ProgressInfo> {
     }
 
     fn inc(&self, delta: u64, get_immediate_image: &dyn Fn() -> ColorImage) {
-        self.progress
+        self.current
             .fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
         *self.immediate_image.lock().unwrap() = Some(get_immediate_image());
         self.ctx.request_repaint();
@@ -81,6 +86,30 @@ impl RaytracerApp {
             num_draws: 0,
         }
     }
+
+    fn start_render(&mut self, ctx: &egui::Context) {
+        self.image_promise.get_or_insert_with(|| {
+            let (sender, promise) = Promise::new();
+
+            self.progress = Some(Arc::new(ProgressInfo::new(ctx.clone())));
+            let progress: Box<dyn ProgressBarWrapper> =
+                Box::new(Arc::clone(&self.progress.as_ref().unwrap()));
+            let params = self.params.clone();
+            let world = Arc::clone(&self.world);
+            let camera = self.camera.clone();
+            let stop = Arc::new(AtomicBool::new(false));
+            rayon::spawn(move || {
+                let img =
+                    crate::render_live(&params, &world, &camera, &progress, Arc::clone(&stop));
+                let img = ColorImage::from_rgba_unmultiplied(
+                    [img.width() as usize, img.height() as usize],
+                    img.as_flat_samples().samples,
+                );
+                sender.send(RetainedImage::from_color_image("rendered_image", img));
+            });
+            promise
+        });
+    }
 }
 
 impl eframe::App for RaytracerApp {
@@ -90,14 +119,9 @@ impl eframe::App for RaytracerApp {
             if let Some(image_promise) = self.image_promise.as_ref() {
                 match image_promise.ready() {
                     None => {
-                        ui.spinner();
+                        // Update progress bar
                         let progress_info = self.progress.as_ref().unwrap();
-                        let progress = progress_info
-                            .progress
-                            .load(std::sync::atomic::Ordering::Relaxed)
-                            as f32
-                            / progress_info.len.load(std::sync::atomic::Ordering::Relaxed) as f32;
-                        let progress_bar = egui::ProgressBar::new(progress)
+                        let progress_bar = egui::ProgressBar::new(progress_info.percentage())
                             .show_percentage()
                             .animate(true);
                         ui.add(progress_bar);
@@ -121,32 +145,7 @@ impl eframe::App for RaytracerApp {
                 }
             } else {
                 if ui.button("Render").clicked() {
-                    self.image_promise.get_or_insert_with(|| {
-                        let (sender, promise) = Promise::new();
-
-                        self.progress = Some(Arc::new(ProgressInfo::new(ctx.clone())));
-                        let progress: Box<dyn ProgressBarWrapper> =
-                            Box::new(Arc::clone(&self.progress.as_ref().unwrap()));
-                        let params = self.params.clone();
-                        let world = Arc::clone(&self.world);
-                        let camera = self.camera.clone();
-                        let stop = Arc::new(AtomicBool::new(false));
-                        rayon::spawn(move || {
-                            let img = crate::render_live(
-                                &params,
-                                &world,
-                                &camera,
-                                &progress,
-                                Arc::clone(&stop),
-                            );
-                            let img = ColorImage::from_rgba_unmultiplied(
-                                [img.width() as usize, img.height() as usize],
-                                img.as_flat_samples().samples,
-                            );
-                            sender.send(RetainedImage::from_color_image("rendered_image", img));
-                        });
-                        promise
-                    });
+                    self.start_render(ctx);
                 }
             }
             self.num_draws += 1;
