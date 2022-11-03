@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::ops::Neg;
 
+use eframe::epaint::ColorImage;
 use image::{Rgb, Rgba};
 use indicatif::ProgressBar;
 use nalgebra::Vector3;
@@ -14,6 +15,7 @@ pub type Point3 = Vec3;
 
 pub trait AsRgb {
     fn as_rgb(self) -> Rgb<u8>;
+    fn as_f64_rgba(self) -> Rgba<f64>;
     fn as_rgb_multisample(self, samples_per_pixel: u32) -> Rgb<u8>;
     fn as_rgba_multisample(self, samples_per_pixel: u32) -> Rgba<u8>;
 }
@@ -21,10 +23,15 @@ pub trait AsRgb {
 impl AsRgb for Color {
     fn as_rgb(self) -> Rgb<u8> {
         Rgb([
-            (self.x * 255.999) as u8,
-            (self.y * 255.999) as u8,
-            (self.z * 255.999) as u8,
+            (self.x.sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            (self.y.sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+            (self.z.sqrt().clamp(0.0, 0.999) * 256.0) as u8,
         ])
+    }
+
+    #[inline(always)]
+    fn as_f64_rgba(self) -> Rgba<f64> {
+        Rgba([self.x, self.y, self.z, 1.0])
     }
 
     fn as_rgb_multisample(self, samples_per_pixel: u32) -> Rgb<u8> {
@@ -118,10 +125,9 @@ pub fn refract(uv: &Vec3, n: &Vec3, etai_over_etat: f64) -> Vec3 {
     r_out_perp + r_out_parallel
 }
 
-
-pub trait ProgressBarWrapper : Send + Sync {
+pub trait ProgressBarWrapper: Send + Sync {
     fn set_length(&self, len: u64);
-    fn inc(&self, delta: u64);
+    fn inc(&self, delta: u64, get_immediate_image: &dyn Fn() -> ColorImage);
     fn finish(&self);
 }
 
@@ -130,7 +136,7 @@ impl ProgressBarWrapper for ProgressBar {
         self.set_length(len);
     }
 
-    fn inc(&self, delta: u64) {
+    fn inc(&self, delta: u64, _get_immediate_image: &dyn Fn() -> ColorImage) {
         self.inc(delta);
     }
 

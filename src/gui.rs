@@ -1,6 +1,6 @@
 use std::sync::{
     atomic::{AtomicBool, AtomicU64},
-    Arc,
+    Arc, Mutex,
 };
 
 use eframe::{egui, epaint::ColorImage};
@@ -21,6 +21,7 @@ pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
 
 struct RaytracerApp {
     image_promise: Option<Promise<RetainedImage>>,
+    immediate_image: Option<RetainedImage>,
     progress: Option<Arc<ProgressInfo>>,
     num_draws: u32,
     params: RaytraceParams,
@@ -32,6 +33,7 @@ struct ProgressInfo {
     len: AtomicU64,
     progress: AtomicU64,
     finished: AtomicBool,
+    immediate_image: Mutex<Option<ColorImage>>,
     ctx: egui::Context,
 }
 
@@ -41,6 +43,7 @@ impl ProgressInfo {
             len: 0.into(),
             progress: 0.into(),
             finished: false.into(),
+            immediate_image: Mutex::new(None),
             ctx,
         }
     }
@@ -52,9 +55,10 @@ impl ProgressBarWrapper for Arc<ProgressInfo> {
         self.ctx.request_repaint();
     }
 
-    fn inc(&self, delta: u64) {
+    fn inc(&self, delta: u64, get_immediate_image: &dyn Fn() -> ColorImage) {
         self.progress
             .fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
+        *self.immediate_image.lock().unwrap() = Some(get_immediate_image());
         self.ctx.request_repaint();
     }
 
@@ -69,6 +73,7 @@ impl RaytracerApp {
     fn new(params: RaytraceParams, world: World, camera: Camera) -> Self {
         RaytracerApp {
             image_promise: None,
+            immediate_image: None,
             progress: None,
             params,
             world: Arc::new(world),
@@ -86,14 +91,29 @@ impl eframe::App for RaytracerApp {
                 match image_promise.ready() {
                     None => {
                         ui.spinner();
-                        let progress = self.progress.as_ref().unwrap();
-                        let progress = progress.progress.load(std::sync::atomic::Ordering::Relaxed)
+                        let progress_info = self.progress.as_ref().unwrap();
+                        let progress = progress_info
+                            .progress
+                            .load(std::sync::atomic::Ordering::Relaxed)
                             as f32
-                            / progress.len.load(std::sync::atomic::Ordering::Relaxed) as f32;
+                            / progress_info.len.load(std::sync::atomic::Ordering::Relaxed) as f32;
                         let progress_bar = egui::ProgressBar::new(progress)
                             .show_percentage()
                             .animate(true);
                         ui.add(progress_bar);
+
+                        // Update immediate image from progress struct
+                        let mut immediate_image = progress_info.immediate_image.lock().unwrap();
+                        if let Some(immediate_image) = immediate_image.take() {
+                            self.immediate_image = Some(RetainedImage::from_color_image(
+                                "immediate_image",
+                                immediate_image,
+                            ));
+                        }
+                        // Show immediate image
+                        if let Some(immediate_image) = self.immediate_image.as_ref() {
+                            immediate_image.show_scaled(ui, 1.5);
+                        }
                     }
                     Some(image) => {
                         image.show_scaled(ui, 1.5);
@@ -110,9 +130,15 @@ impl eframe::App for RaytracerApp {
                         let params = self.params.clone();
                         let world = Arc::clone(&self.world);
                         let camera = self.camera.clone();
-
+                        let stop = Arc::new(AtomicBool::new(false));
                         rayon::spawn(move || {
-                            let img = crate::render(&params, &world, &camera, &progress);
+                            let img = crate::render_live(
+                                &params,
+                                &world,
+                                &camera,
+                                &progress,
+                                Arc::clone(&stop),
+                            );
                             let img = ColorImage::from_rgba_unmultiplied(
                                 [img.width() as usize, img.height() as usize],
                                 img.as_flat_samples().samples,

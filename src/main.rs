@@ -22,7 +22,8 @@ mod world;
 
 use std::error::Error;
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use crate::camera::Camera;
 use crate::hittables::{Hittable, Sphere};
@@ -30,8 +31,9 @@ use crate::util::{random_unit_vector, AsRgb, Color, Point3, Ray, Vec3};
 use crate::world::World;
 use camera::CameraBuilder;
 use clap::Parser;
+use eframe::epaint::{Color32, ColorImage};
 use hittables::Cylinder;
-use image::{ImageBuffer, RgbaImage};
+use image::{ImageBuffer, Rgba, RgbaImage};
 use indicatif::ProgressBar;
 use material::{Dielectric, Lambertian, Metal};
 use rand::distributions::Uniform;
@@ -65,41 +67,131 @@ pub struct RaytraceParams {
     pub max_depth: u32,
 }
 
+type F64RgbaImage = ImageBuffer<Rgba<f64>, Vec<f64>>;
+struct SamplesAdder {
+    sum_img: F64RgbaImage,
+    num_samples: u32,
+}
+
+impl SamplesAdder {
+    fn new(width: u32, height: u32) -> Self {
+        SamplesAdder {
+            sum_img: ImageBuffer::new(width, height),
+            num_samples: 0,
+        }
+    }
+
+    fn add_image(&mut self, step_img: &F64RgbaImage) {
+        let step_samples: &[f64] = step_img.as_flat_samples().samples;
+        let sum_samples: &mut [f64] = self.sum_img.as_flat_samples_mut().samples;
+        for (step_sample, sum_sample) in step_samples.iter().zip(sum_samples.iter_mut()) {
+            *sum_sample += *step_sample;
+        }
+        self.num_samples += 1;
+    }
+
+    fn normalized(&self) -> RgbaImage {
+        let num_samples = self.num_samples as f64;
+        let mut img = RgbaImage::new(self.sum_img.width(), self.sum_img.height());
+        let sum_samples = self.sum_img.as_flat_samples().samples;
+        let img_samples = img.as_flat_samples_mut().samples;
+        for (sum_sample, img_sample) in sum_samples.iter().zip(img_samples.iter_mut()) {
+            *img_sample = ((*sum_sample / num_samples).sqrt().clamp(0.0, 0.999) * 256.0) as u8;
+        }
+        img
+    }
+
+    fn normalized_colorimage(&self) -> ColorImage {
+        let num_samples = self.num_samples as f64;
+        let sum_samples = self.sum_img.as_flat_samples().samples;
+        let size = [
+            self.sum_img.width() as usize,
+            self.sum_img.height() as usize,
+        ];
+        let mut img_pixels: Vec<Color32> = vec![Color32::from_gray(0); size[0] * size[1]];
+
+        for (sum_pixels, img_pixel) in sum_samples.chunks_exact(4).zip(img_pixels.iter_mut()) {
+            *img_pixel = Color32::from_rgba_unmultiplied(
+                ((sum_pixels[0] / num_samples).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+                ((sum_pixels[1] / num_samples).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+                ((sum_pixels[2] / num_samples).sqrt().clamp(0.0, 0.999) * 256.0) as u8,
+                255,
+            )
+        }
+        ColorImage {
+            size,
+            pixels: img_pixels,
+        }
+    }
+}
+
+pub fn render_live(
+    params: &RaytraceParams,
+    world: &World,
+    camera: &Camera,
+    progress: &Box<dyn ProgressBarWrapper>,
+    stop: Arc<AtomicBool>,
+) -> RgbaImage {
+    progress.set_length(params.samples_per_pixel as u64);
+
+    let image_height: u32 = (params.image_width as f64 / params.aspect_ratio) as u32;
+    let img: Mutex<SamplesAdder> = Mutex::new(SamplesAdder::new(params.image_width, image_height));
+
+    (0..params.samples_per_pixel).into_par_iter().for_each(|s| {
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let mut small_rng = SmallRng::seed_from_u64(232008239771 + s as u64);
+        let step_img = render_sample(params, world, camera, &mut small_rng, Arc::clone(&stop));
+
+        img.lock().unwrap().add_image(&step_img);
+
+        progress.inc(1, &Box::new(|| img.lock().unwrap().normalized_colorimage()));
+    });
+    progress.finish();
+    img.into_inner().unwrap().normalized()
+}
+
 pub fn render(
     params: &RaytraceParams,
     world: &World,
     camera: &Camera,
     progress: &Box<dyn ProgressBarWrapper>,
 ) -> RgbaImage {
+    render_live(
+        params,
+        world,
+        camera,
+        progress,
+        Arc::new(AtomicBool::new(false)),
+    )
+}
+
+pub fn render_sample(
+    params: &RaytraceParams,
+    world: &World,
+    camera: &Camera,
+    rng: &mut SmallRng,
+    stop: Arc<AtomicBool>,
+) -> F64RgbaImage {
     let image_height: u32 = (params.image_width as f64 / params.aspect_ratio) as u32;
-    progress.set_length(image_height as u64);
+    let mut img: F64RgbaImage = ImageBuffer::new(params.image_width, image_height);
+    let rn_distr: Uniform<f64> = Uniform::new(0.0, 1.0);
 
-    let img: Mutex<RgbaImage> = Mutex::new(ImageBuffer::new(params.image_width, image_height));
-
-    let range = 0..image_height;
-    range.into_par_iter().for_each(|y| {
-        let mut small_rng = SmallRng::seed_from_u64(232008239771 + y as u64);
-        let rn_distr: Uniform<f64> = Uniform::new(0.0, 1.0);
+    for y in 0..image_height {
         for x in 0..params.image_width {
-            let mut c = Color::zeros();
-            for _ in 0..params.samples_per_pixel {
-                let u =
-                    (x as f64 + rn_distr.sample(&mut small_rng)) / (params.image_width - 1) as f64;
-                let v = (y as f64 + rn_distr.sample(&mut small_rng)) / (image_height - 1) as f64;
-                let ray = camera.get_ray(u, v, &mut small_rng);
-                c += ray_color(&ray, &world, params.max_depth, &mut small_rng);
-            }
-            img.lock().unwrap().put_pixel(
-                x,
-                image_height - 1 - y,
-                c.as_rgba_multisample(params.samples_per_pixel),
-            ); // Image uses inverse y axis direction
+            let u = (x as f64 + rn_distr.sample(rng)) / (params.image_width - 1) as f64;
+            let v = (y as f64 + rn_distr.sample(rng)) / (image_height - 1) as f64;
+            let ray = camera.get_ray(u, v, rng);
+            let c = ray_color(&ray, &world, params.max_depth, rng);
+            img.put_pixel(x, image_height - 1 - y, c.as_f64_rgba()); // ImageBuffer uses inverse y axis direction
         }
-        progress.inc(1);
-    });
-    progress.finish();
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+    }
 
-    img.into_inner().unwrap()
+    img
 }
 
 fn scene_chapter13() -> (World, CameraBuilder) {
@@ -203,7 +295,7 @@ fn scene_tutorial() -> (World, CameraBuilder) {
         .aperture(0.0)
         .focus_dist(10.0);
 
-    (world, camera)    
+    (world, camera)
 }
 
 #[allow(unused_variables)]
@@ -237,7 +329,7 @@ fn scene_cylinder() -> (World, CameraBuilder) {
         .aperture(0.0)
         .focus_dist(10.0);
 
-    (world, camera)  
+    (world, camera)
 }
 
 fn ray_color(ray: &Ray, world: &World, depth: u32, rng: &mut SmallRng) -> Color {
@@ -277,13 +369,17 @@ fn main() {
 
     // World and Camera
     let (world, mut default_camera_builder) = scene_cylinder();
-    let camera = default_camera_builder.aspect_ratio(args.raytrace_params.aspect_ratio).build().unwrap();
+    let camera = default_camera_builder
+        .aspect_ratio(args.raytrace_params.aspect_ratio)
+        .build()
+        .unwrap();
 
     if args.gui {
         crate::gui::run_gui(args.raytrace_params, world, camera);
     } else {
         let progress: Box<dyn ProgressBarWrapper> = Box::new(ProgressBar::new(1));
         let img = render(&args.raytrace_params, &world, &camera, &progress);
-        img.save(args.output_filename).expect("Could not save file.");
+        img.save(args.output_filename)
+            .expect("Could not save file.");
     }
 }
