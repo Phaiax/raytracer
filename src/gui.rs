@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64},
+    atomic::{AtomicBool, AtomicU64, Ordering::Relaxed},
     Arc, Mutex,
 };
 
@@ -20,13 +20,18 @@ pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
 }
 
 struct RaytracerApp {
-    image_promise: Option<Promise<RetainedImage>>,
-    immediate_image: Option<RetainedImage>,
-    progress: Option<Arc<ProgressInfo>>,
+    render_action: Option<RenderAction>,
     num_draws: u32,
     params: RaytraceParams,
     world: Arc<World>,
     camera: Camera,
+}
+
+struct RenderAction {
+    image_promise: Promise<RetainedImage>,
+    immediate_image: Option<RetainedImage>,
+    progress: Arc<ProgressInfo>,
+    stop: Arc<AtomicBool>,
 }
 
 struct ProgressInfo {
@@ -49,27 +54,24 @@ impl ProgressInfo {
     }
 
     fn percentage(&self) -> f32 {
-        self.current.load(std::sync::atomic::Ordering::Relaxed) as f32
-            / self.len.load(std::sync::atomic::Ordering::Relaxed) as f32
+        self.current.load(Relaxed) as f32 / self.len.load(Relaxed) as f32
     }
 }
 
 impl ProgressBarWrapper for Arc<ProgressInfo> {
     fn set_length(&self, len: u64) {
-        self.len.store(len, std::sync::atomic::Ordering::Relaxed);
+        self.len.store(len, Relaxed);
         self.ctx.request_repaint();
     }
 
     fn inc(&self, delta: u64, get_immediate_image: &dyn Fn() -> ColorImage) {
-        self.current
-            .fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
+        self.current.fetch_add(delta, Relaxed);
         *self.immediate_image.lock().unwrap() = Some(get_immediate_image());
         self.ctx.request_repaint();
     }
 
     fn finish(&self) {
-        self.finished
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.finished.store(true, Relaxed);
         self.ctx.request_repaint();
     }
 }
@@ -77,9 +79,7 @@ impl ProgressBarWrapper for Arc<ProgressInfo> {
 impl RaytracerApp {
     fn new(params: RaytraceParams, world: World, camera: Camera) -> Self {
         RaytracerApp {
-            image_promise: None,
-            immediate_image: None,
-            progress: None,
+            render_action: None,
             params,
             world: Arc::new(world),
             camera,
@@ -88,27 +88,38 @@ impl RaytracerApp {
     }
 
     fn start_render(&mut self, ctx: &egui::Context) {
-        self.image_promise.get_or_insert_with(|| {
-            let (sender, promise) = Promise::new();
+        if let Some(old_render_action) = self.render_action.take() {
+            old_render_action.stop.store(true, Relaxed);
+        }
 
-            self.progress = Some(Arc::new(ProgressInfo::new(ctx.clone())));
-            let progress: Box<dyn ProgressBarWrapper> =
-                Box::new(Arc::clone(&self.progress.as_ref().unwrap()));
-            let params = self.params.clone();
-            let world = Arc::clone(&self.world);
-            let camera = self.camera.clone();
-            let stop = Arc::new(AtomicBool::new(false));
-            rayon::spawn(move || {
-                let img =
-                    crate::render_live(&params, &world, &camera, &progress, Arc::clone(&stop));
-                let img = ColorImage::from_rgba_unmultiplied(
-                    [img.width() as usize, img.height() as usize],
-                    img.as_flat_samples().samples,
-                );
-                sender.send(RetainedImage::from_color_image("rendered_image", img));
-            });
-            promise
+        let (sender, promise) = Promise::new();
+
+        let render_action = RenderAction {
+            image_promise: promise,
+            immediate_image: None,
+            progress: Arc::new(ProgressInfo::new(ctx.clone())),
+            stop: Arc::new(AtomicBool::new(false)),
+        };
+
+        let params = self.params.clone();
+        let world = Arc::clone(&self.world);
+        let camera = self.camera.clone();
+        let stop = Arc::clone(&render_action.stop);
+
+        let progress: Box<dyn ProgressBarWrapper> =
+            Box::new(Arc::clone(&render_action.progress));
+
+        rayon::spawn(move || {
+            let img = crate::render_live(&params, &world, &camera, &progress, stop);
+            let img = ColorImage::from_rgba_unmultiplied(
+                [img.width() as usize, img.height() as usize],
+                img.as_flat_samples().samples,
+            );
+            sender.send(RetainedImage::from_color_image("rendered_image", img));
         });
+
+        self.render_action = Some(render_action);
+
     }
 }
 
@@ -116,26 +127,28 @@ impl eframe::App for RaytracerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("My egui Application");
-            if let Some(image_promise) = self.image_promise.as_ref() {
-                match image_promise.ready() {
+            if let Some(render_action) = self.render_action.as_mut() {
+                match render_action.image_promise.ready() {
                     None => {
                         // Update progress bar
-                        let progress_info = self.progress.as_ref().unwrap();
-                        let progress_bar = egui::ProgressBar::new(progress_info.percentage())
-                            .show_percentage()
-                            .animate(true);
+                        let progress_bar =
+                            egui::ProgressBar::new(render_action.progress.percentage())
+                                .show_percentage()
+                                .animate(true);
                         ui.add(progress_bar);
 
                         // Update immediate image from progress struct
-                        let mut immediate_image = progress_info.immediate_image.lock().unwrap();
+                        let mut immediate_image =
+                            render_action.progress.immediate_image.lock().unwrap();
                         if let Some(immediate_image) = immediate_image.take() {
-                            self.immediate_image = Some(RetainedImage::from_color_image(
+                            render_action.immediate_image = Some(RetainedImage::from_color_image(
                                 "immediate_image",
                                 immediate_image,
                             ));
                         }
+
                         // Show immediate image
-                        if let Some(immediate_image) = self.immediate_image.as_ref() {
+                        if let Some(immediate_image) = render_action.immediate_image.as_ref() {
                             immediate_image.show_scaled(ui, 1.5);
                         }
                     }
@@ -143,11 +156,12 @@ impl eframe::App for RaytracerApp {
                         image.show_scaled(ui, 1.5);
                     }
                 }
-            } else {
-                if ui.button("Render").clicked() {
-                    self.start_render(ctx);
-                }
             }
+
+            if ui.button("Render").clicked() {
+                self.start_render(ctx);
+            }
+
             self.num_draws += 1;
             ui.label(format!("Drawn {} times.", self.num_draws));
         });

@@ -23,6 +23,7 @@ mod world;
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, Mutex};
 
 use crate::camera::Camera;
@@ -138,13 +139,22 @@ pub fn render_live(
     let img: Mutex<SamplesAdder> = Mutex::new(SamplesAdder::new(params.image_width, image_height));
 
     (0..params.samples_per_pixel).into_par_iter().for_each(|s| {
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+        if stop.load(Relaxed) {
             return;
         }
+
         let mut small_rng = SmallRng::seed_from_u64(232008239771 + s as u64);
         let step_img = render_sample(params, world, camera, &mut small_rng, Arc::clone(&stop));
 
+        if stop.load(Relaxed) {
+            return;
+        }
+
         img.lock().unwrap().add_image(&step_img);
+
+        if stop.load(Relaxed) {
+            return;
+        }
 
         progress.inc(1, &Box::new(|| img.lock().unwrap().normalized_colorimage()));
     });
@@ -186,7 +196,7 @@ pub fn render_sample(
             let c = ray_color(&ray, &world, params.max_depth, rng);
             img.put_pixel(x, image_height - 1 - y, c.as_f64_rgba()); // ImageBuffer uses inverse y axis direction
         }
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+        if stop.load(Relaxed) {
             break;
         }
     }
