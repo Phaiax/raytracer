@@ -3,7 +3,11 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use eframe::{egui, epaint::ColorImage};
+use eframe::{
+    egui,
+    epaint::{ColorImage, Pos2, Vec2},
+    NativeOptions,
+};
 use egui_extras::RetainedImage;
 use image::RgbImage;
 use poll_promise::Promise;
@@ -11,7 +15,11 @@ use poll_promise::Promise;
 use crate::{camera::Camera, util::ProgressBarWrapper, world::World, RaytraceParams};
 
 pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        initial_window_size: Some(Vec2::new(2000.0, 1300.0)),
+        initial_window_pos: Some(Pos2::new(600.0, 300.0)),
+        ..NativeOptions::default()
+    };
     eframe::run_native(
         "Raytracer",
         options,
@@ -21,6 +29,7 @@ pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
 
 struct RaytracerApp {
     render_action: Option<RenderAction>,
+    final_render: Option<RetainedImage>,
     num_draws: u32,
     params: RaytraceParams,
     world: Arc<World>,
@@ -32,6 +41,18 @@ struct RenderAction {
     immediate_image: Option<RetainedImage>,
     progress: Arc<ProgressInfo>,
     stop: Arc<AtomicBool>,
+}
+
+impl RenderAction {
+    fn take_immediate_image(&mut self) {
+        let mut immediate_image = self.progress.immediate_image.lock().unwrap();
+        if let Some(immediate_image) = immediate_image.take() {
+            self.immediate_image = Some(RetainedImage::from_color_image(
+                "immediate_image",
+                immediate_image,
+            ));
+        }
+    }
 }
 
 struct ProgressInfo {
@@ -80,6 +101,7 @@ impl RaytracerApp {
     fn new(params: RaytraceParams, world: World, camera: Camera) -> Self {
         RaytracerApp {
             render_action: None,
+            final_render: None,
             params,
             world: Arc::new(world),
             camera,
@@ -106,8 +128,7 @@ impl RaytracerApp {
         let camera = self.camera.clone();
         let stop = Arc::clone(&render_action.stop);
 
-        let progress: Box<dyn ProgressBarWrapper> =
-            Box::new(Arc::clone(&render_action.progress));
+        let progress: Box<dyn ProgressBarWrapper> = Box::new(Arc::clone(&render_action.progress));
 
         rayon::spawn(move || {
             let img = crate::render_live(&params, &world, &camera, &progress, stop);
@@ -119,51 +140,73 @@ impl RaytracerApp {
         });
 
         self.render_action = Some(render_action);
+    }
 
+    fn check_render_finished(&mut self) {
+        let render_available = self
+            .render_action
+            .as_ref()
+            .map(|ra| ra.image_promise.poll().is_ready())
+            .unwrap_or(false);
+
+        if render_available {
+            let render_action = self.render_action.take().unwrap();
+            let image = render_action.image_promise.try_take().ok().unwrap();
+            self.final_render = Some(image);
+        }
     }
 }
 
 impl eframe::App for RaytracerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My egui Application");
-            if let Some(render_action) = self.render_action.as_mut() {
-                match render_action.image_promise.ready() {
-                    None => {
-                        // Update progress bar
-                        let progress_bar =
-                            egui::ProgressBar::new(render_action.progress.percentage())
-                                .show_percentage()
-                                .animate(true);
-                        ui.add(progress_bar);
+        self.num_draws += 1;
 
-                        // Update immediate image from progress struct
-                        let mut immediate_image =
-                            render_action.progress.immediate_image.lock().unwrap();
-                        if let Some(immediate_image) = immediate_image.take() {
-                            render_action.immediate_image = Some(RetainedImage::from_color_image(
-                                "immediate_image",
-                                immediate_image,
-                            ));
-                        }
+        let progressbar = self
+            .render_action
+            .as_ref()
+            .map(|ra| (ra.progress.percentage(), ra.progress.finished.load(Relaxed)))
+            .map(|(percentage, finished)| {
+                egui::ProgressBar::new(percentage)
+                    .show_percentage()
+                    .animate(finished)
+            })
+            .unwrap_or_else(|| egui::ProgressBar::new(1.0).show_percentage());
 
-                        // Show immediate image
-                        if let Some(immediate_image) = render_action.immediate_image.as_ref() {
-                            immediate_image.show_scaled(ui, 1.5);
-                        }
-                    }
-                    Some(image) => {
-                        image.show_scaled(ui, 1.5);
-                    }
+        self.check_render_finished();
+
+        egui::TopBottomPanel::bottom("status_bar")
+            .default_height(40.0)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(format!("Drawn {} times.", self.num_draws));
+                    ui.add(progressbar);
+                    ui.allocate_space(ui.available_size());
+                });
+            });
+
+        egui::SidePanel::left("control_panel")
+            .resizable(false)
+            // .min_width(600.0)
+            // .max_width(600.0)
+            .default_width(400.0)
+            .show(ctx, |ui| {
+                ui.heading("Raytracer");
+                ui.label("Hello World!");
+                if ui.button("Render").clicked() {
+                    self.start_render(ctx);
                 }
-            }
+            });
 
-            if ui.button("Render").clicked() {
-                self.start_render(ctx);
-            }
-
-            self.num_draws += 1;
-            ui.label(format!("Drawn {} times.", self.num_draws));
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.render_action
+                .as_mut()
+                .map(|ra| {
+                    ra.take_immediate_image();
+                    ra.immediate_image.as_ref()
+                })
+                .flatten()
+                .or_else(|| self.final_render.as_ref())
+                .map(|i| i.show_scaled(ui, 1.5));
         });
     }
 }
