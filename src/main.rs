@@ -378,17 +378,19 @@ fn main() {
     let args = Args::parse();
 
     // World and Camera
-    let (world, mut default_camera_builder) = scene_cylinder();
-    let camera = default_camera_builder
-        .aspect_ratio(args.raytrace_params.aspect_ratio)
-        .build()
-        .unwrap();
+    let (world, mut camera_builder) = scene_cylinder();
+    camera_builder.aspect_ratio(args.raytrace_params.aspect_ratio);
 
     if args.gui {
-        crate::gui::run_gui(args.raytrace_params, world, camera);
+        crate::gui::run_gui(args.raytrace_params, world, camera_builder);
     } else {
         let progress: Box<dyn ProgressBarWrapper> = Box::new(ProgressBar::new(1));
-        let img = render(&args.raytrace_params, &world, &camera, &progress);
+        let img = render(
+            &args.raytrace_params,
+            &world,
+            &camera_builder.build().unwrap(),
+            &progress,
+        );
         img.save(args.output_filename)
             .expect("Could not save file.");
     }

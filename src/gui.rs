@@ -12,9 +12,9 @@ use egui_extras::RetainedImage;
 use image::RgbImage;
 use poll_promise::Promise;
 
-use crate::{camera::Camera, util::ProgressBarWrapper, world::World, RaytraceParams};
+use crate::{camera::CameraBuilder, util::ProgressBarWrapper, world::World, RaytraceParams};
 
-pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
+pub fn run_gui(params: RaytraceParams, world: World, camerabuilder: CameraBuilder) {
     let options = eframe::NativeOptions {
         initial_window_size: Some(Vec2::new(2000.0, 1300.0)),
         initial_window_pos: Some(Pos2::new(600.0, 300.0)),
@@ -23,7 +23,7 @@ pub fn run_gui(params: RaytraceParams, world: World, camera: Camera) {
     eframe::run_native(
         "Raytracer",
         options,
-        Box::new(move |_cc| Box::new(RaytracerApp::new(params, world, camera))),
+        Box::new(move |_cc| Box::new(RaytracerApp::new(params, world, camerabuilder))),
     );
 }
 
@@ -33,7 +33,7 @@ struct RaytracerApp {
     num_draws: u32,
     params: RaytraceParams,
     world: Arc<World>,
-    camera: Camera,
+    camerabuilder: CameraBuilder,
 }
 
 struct RenderAction {
@@ -98,13 +98,13 @@ impl ProgressBarWrapper for Arc<ProgressInfo> {
 }
 
 impl RaytracerApp {
-    fn new(params: RaytraceParams, world: World, camera: Camera) -> Self {
+    fn new(params: RaytraceParams, world: World, camerabuilder: CameraBuilder) -> Self {
         RaytracerApp {
             render_action: None,
             final_render: None,
             params,
             world: Arc::new(world),
-            camera,
+            camerabuilder,
             num_draws: 0,
         }
     }
@@ -125,17 +125,22 @@ impl RaytracerApp {
 
         let params = self.params.clone();
         let world = Arc::clone(&self.world);
-        let camera = self.camera.clone();
+        let camera = self
+            .camerabuilder
+            .build()
+            .unwrap();
         let stop = Arc::clone(&render_action.stop);
 
         let progress: Box<dyn ProgressBarWrapper> = Box::new(Arc::clone(&render_action.progress));
 
+        println!("Start render with vfow={:?}", camera.vertical);
         rayon::spawn(move || {
             let img = crate::render_live(&params, &world, &camera, &progress, stop);
             let img = ColorImage::from_rgba_unmultiplied(
                 [img.width() as usize, img.height() as usize],
                 img.as_flat_samples().samples,
             );
+            println!("Done rendering with vfow={:?}", camera.vertical);
             sender.send(RetainedImage::from_color_image("rendered_image", img));
         });
 
@@ -152,6 +157,7 @@ impl RaytracerApp {
         if render_available {
             let render_action = self.render_action.take().unwrap();
             let image = render_action.image_promise.try_take().ok().unwrap();
+            println!("Get finished render");
             self.final_render = Some(image);
         }
     }
@@ -193,6 +199,17 @@ impl eframe::App for RaytracerApp {
                 ui.heading("Raytracer");
                 ui.label("Hello World!");
                 if ui.button("Render").clicked() {
+                    self.start_render(ctx);
+                }
+
+                let mut vfov = self.camerabuilder.vfov.unwrap();
+                ui.add(
+                    egui::Slider::new(&mut vfov, 70.0..=100.0)
+                        .text("Vertical Field of View")
+                        .suffix("°"),
+                );
+                if vfov != self.camerabuilder.vfov.unwrap() {
+                    self.camerabuilder.vfov(vfov);
                     self.start_render(ctx);
                 }
             });

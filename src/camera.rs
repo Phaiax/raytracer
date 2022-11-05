@@ -73,7 +73,7 @@ pub struct Camera {
     /// Lower left corner of viewport
     lower_left_corner: Point3,
     /// Vector from lower_left_corner to right side of viewport
-    vertical: Vec3,
+    pub vertical: Vec3,
     /// Vector from lower_left_corner to top side of viewport
     horizontal: Vec3,
     ///
