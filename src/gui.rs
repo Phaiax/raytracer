@@ -1,10 +1,13 @@
-use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering::Relaxed},
-    Arc, Mutex,
+use std::{
+    ops::RangeInclusive,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering::Relaxed},
+        Arc, Mutex,
+    },
 };
 
 use eframe::{
-    egui::{self, Context, Id},
+    egui::{self, Context, Id, Slider, Ui},
     epaint::{ColorImage, Pos2, Vec2},
     NativeOptions,
 };
@@ -125,6 +128,8 @@ impl RaytracerApp {
             stop: Arc::new(AtomicBool::new(false)),
         };
 
+        self.camerabuilder.aspect_ratio(self.params.aspect_ratio);
+
         let params = self.params.clone();
         let world = Arc::clone(&self.world);
         let camera = self.camerabuilder.build().unwrap();
@@ -158,6 +163,32 @@ impl RaytracerApp {
             let image = render_action.image_promise.try_take().ok().unwrap();
             println!("Get finished render");
             self.final_render = Some(image);
+        }
+    }
+
+    /// Returns true on change
+    fn slider<Num: eframe::emath::Numeric>(
+        ui: &mut Ui,
+        param: &mut Num,
+        text: &str,
+        suffix: &str,
+        range: RangeInclusive<Num>,
+        extra: impl FnOnce(Slider) -> Slider,
+    ) -> bool {
+        let param_orig: Num = *param;
+        let mut param_mut = param_orig;
+        let mut slider = egui::Slider::new(&mut param_mut, range)
+            .text(text)
+            .suffix(suffix);
+        slider = extra(slider);
+        ui.add_space(5.0);
+        ui.add(slider);
+        ui.add_space(5.0);
+        if param_mut != param_orig {
+            *param = param_mut;
+            true
+        } else {
+            false
         }
     }
 }
@@ -201,20 +232,150 @@ impl eframe::App for RaytracerApp {
             .default_width(400.0)
             .show(ctx, |ui| {
                 ui.heading("Raytracer");
-                ui.label("Hello World!");
                 if ui.button("Render").clicked() {
                     self.start_render(ctx);
                 }
+                ui.style_mut().spacing.slider_width = 400.0;
 
-                let mut vfov = self.camerabuilder.vfov.unwrap();
-                ui.add(
-                    egui::Slider::new(&mut vfov, 70.0..=100.0)
-                        .text("Vertical Field of View")
-                        .suffix("°"),
+                let mut changed = false;
+
+                ui.heading("Camera");
+                changed |= Self::slider(
+                    ui,
+                    self.camerabuilder.vfov.as_mut().unwrap(),
+                    "Vertical Field of View",
+                    "°",
+                    30.0..=180.0,
+                    |s| s,
                 );
-                if vfov != self.camerabuilder.vfov.unwrap() {
-                    self.camerabuilder.vfov(vfov);
-                    self.start_render(ctx);
+                changed |= Self::slider(
+                    ui,
+                    self.camerabuilder.aperture.as_mut().unwrap(),
+                    "Aperture",
+                    "",
+                    0.001..=1.0,
+                    |s: egui::Slider| s.logarithmic(true),
+                );
+                changed |= Self::slider(
+                    ui,
+                    self.camerabuilder.focus_dist.as_mut().unwrap(),
+                    "Focus Distance",
+                    "",
+                    0.1..=100.0,
+                    |s| s,
+                );
+                ui.label("Look At Position");
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookat.as_mut().unwrap().x,
+                    "Lookat X",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookat.as_mut().unwrap().y,
+                    "Lookat Y",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookat.as_mut().unwrap().z,
+                    "Lookat Z",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                ui.label("Look From Position");
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookfrom.as_mut().unwrap().x,
+                    "Lookfrom X",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookfrom.as_mut().unwrap().y,
+                    "Lookfrom Y",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.lookfrom.as_mut().unwrap().z,
+                    "Lookfrom Z",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+
+                ui.label("Vertical Up Direction");
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.vup.as_mut().unwrap().x,
+                    "Vup X",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.vup.as_mut().unwrap().y,
+                    "Vup Y",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.camerabuilder.vup.as_mut().unwrap().z,
+                    "Vup Z",
+                    "",
+                    -10.0..=10.0,
+                    |s| s,
+                );
+
+                ui.heading("Rendering");
+                changed |= Self::slider(
+                    ui,
+                    &mut self.params.aspect_ratio,
+                    "Aspect Ratio",
+                    "",
+                    0.1..=10.0,
+                    |s: egui::Slider| s.logarithmic(true),
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.params.samples_per_pixel,
+                    "Samples per pixel",
+                    "",
+                    1..=5000,
+                    |s: egui::Slider| s.logarithmic(true),
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.params.max_depth,
+                    "Max Depth",
+                    "",
+                    1..=100,
+                    |s| s,
+                );
+                changed |= Self::slider(
+                    ui,
+                    &mut self.params.image_width,
+                    "Image Width",
+                    "px",
+                    50..=3000,
+                    |s| s,
+                );
+                if changed {
+                    self.start_render(ui.ctx());
                 }
             });
 
