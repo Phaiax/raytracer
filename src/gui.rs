@@ -196,8 +196,8 @@ impl eframe::App for RaytracerApp {
 
         egui::SidePanel::left("control_panel")
             .resizable(false)
-            // .min_width(600.0)
-            // .max_width(600.0)
+            .min_width(600.0)
+            .max_width(600.0)
             .default_width(400.0)
             .show(ctx, |ui| {
                 ui.heading("Raytracer");
