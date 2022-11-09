@@ -28,6 +28,7 @@ pub fn run_gui(params: RaytraceParams, world: World, camerabuilder: CameraBuilde
 }
 
 struct RaytracerApp {
+    startup_done: bool,
     render_action: Option<RenderAction>,
     final_render: Option<RetainedImage>,
     num_draws: u32,
@@ -100,6 +101,7 @@ impl ProgressBarWrapper for Arc<ProgressInfo> {
 impl RaytracerApp {
     fn new(params: RaytraceParams, world: World, camerabuilder: CameraBuilder) -> Self {
         RaytracerApp {
+            startup_done: false,
             render_action: None,
             final_render: None,
             params,
@@ -125,10 +127,7 @@ impl RaytracerApp {
 
         let params = self.params.clone();
         let world = Arc::clone(&self.world);
-        let camera = self
-            .camerabuilder
-            .build()
-            .unwrap();
+        let camera = self.camerabuilder.build().unwrap();
         let stop = Arc::clone(&render_action.stop);
 
         let progress: Box<dyn ProgressBarWrapper> = Box::new(Arc::clone(&render_action.progress));
@@ -165,6 +164,11 @@ impl RaytracerApp {
 
 impl eframe::App for RaytracerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.startup_done {
+            self.start_render(ctx);
+            self.startup_done = true;
+        }
+
         self.num_draws += 1;
 
         let progressbar = self
