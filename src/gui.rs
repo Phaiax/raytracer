@@ -117,6 +117,10 @@ impl RaytracerApp {
     fn start_render(&mut self, ctx: &egui::Context) {
         if let Some(old_render_action) = self.render_action.take() {
             old_render_action.stop.store(true, Relaxed);
+            // Prevent flickering by not falling back to the last finished render
+            if let Some(last_immediate) = old_render_action.immediate_image {
+                self.final_render = Some(last_immediate);
+            }
         }
 
         let (sender, promise) = Promise::new();
