@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use eframe::{
-    egui,
+    egui::{self, Context, Id},
     epaint::{ColorImage, Pos2, Vec2},
     NativeOptions,
 };
@@ -215,15 +215,55 @@ impl eframe::App for RaytracerApp {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.render_action
-                .as_mut()
-                .map(|ra| {
-                    ra.take_immediate_image();
-                    ra.immediate_image.as_ref()
-                })
-                .flatten()
-                .or_else(|| self.final_render.as_ref())
-                .map(|i| i.show_scaled(ui, 1.5));
+            egui::ScrollArea::both()
+                .id_source("main_img_scroll")
+                .max_width(f32::INFINITY)
+                .max_height(f32::INFINITY)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    let zoomstateid = Id::new("main_img_zoom");
+                    let mut zoomstate = ZoomState::load(ui.ctx(), zoomstateid).unwrap_or_default();
+                    zoomstate.zoom *= ui.input().zoom_delta() as f64;
+                    if zoomstate.zoom > 0.99999 && zoomstate.zoom < 1.000001 {
+                        zoomstate.zoom = 1.0;
+                    }
+                    // ui.label(format!(
+                    //     "Zoom: {} (delta {})",
+                    //     zoomstate.zoom,
+                    //     ui.input().zoom_delta()
+                    // ));
+                    self.render_action
+                        .as_mut()
+                        .map(|ra| {
+                            ra.take_immediate_image();
+                            ra.immediate_image.as_ref()
+                        })
+                        .flatten()
+                        .or_else(|| self.final_render.as_ref())
+                        .map(|i| i.show_scaled(ui, zoomstate.zoom as f32));
+                    zoomstate.store(ui.ctx(), zoomstateid);
+                });
         });
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ZoomState {
+    pub zoom: f64,
+}
+
+impl Default for ZoomState {
+    fn default() -> Self {
+        Self { zoom: 3.0 }
+    }
+}
+
+impl ZoomState {
+    pub fn load(ctx: &Context, id: Id) -> Option<Self> {
+        ctx.data().get_persisted(id)
+    }
+
+    pub fn store(self, ctx: &Context, id: Id) {
+        ctx.data().insert_persisted(id, self);
     }
 }
